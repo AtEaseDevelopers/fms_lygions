@@ -26,7 +26,7 @@
     @endif
     <div class="row">
         <!-- Main Table Section -->
-        <div class="col-md-10">
+        <div class="col-md-12" id="tableSection">
             <div class="card">
 
                 <div class="card-body">
@@ -96,6 +96,11 @@
                                     <i class="bi bi-save me-1" style="font-size: 20px;"></i>
                                     Save
                                 </button>
+                                <button type="button" class="btn btn-outline-secondary" id="toggleTruckDetails"
+                                    style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
+                                    <i class="bi bi-layout-sidebar-reverse me-1" style="font-size: 20px;"></i>
+                                    Truck Details
+                                </button>
                                 <a href="{{ route('archived-consignment-order.index') }}">
                                     <button type="button" class="btn btn-outline-warning"
                                         style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
@@ -138,7 +143,7 @@
                     <div id="tableScrollTop" style="overflow-x:auto; overflow-y:hidden;"></div>
                     <div id="tableScrollBottom" style="overflow-x:auto;">
                         <table class="table table-sm table-striped table-bordered align-middle table-nowrap"
-                            style="font-size: 0.85rem; border-collapse: collapse;">
+                            style="font-size: 0.75rem; border-collapse: collapse;">
                             <thead class="">
                                 <tr>
                                     <th class="sticky-col"></th>
@@ -469,7 +474,7 @@
         </div>
 
         <!-- Right Column: Truck Cards -->
-        <div class="col-md-2">
+        <div class="col-md-2 d-none" id="truckDetailsSection">
             <div class="d-flex justify-content-between align-items-center flex-wrap ">
                 <form class="d-flex flex-column gap-1 w-100">
                     <div class="input-group">
@@ -591,6 +596,43 @@
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
         tooltipTriggerList.map(function(tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // Toggle Truck Details Sidebar
+        const toggleBtn = document.getElementById('toggleTruckDetails');
+        const tableSection = document.getElementById('tableSection');
+        const truckDetailsSection = document.getElementById('truckDetailsSection');
+
+        // Load saved preference from localStorage
+        const sidebarVisible = localStorage.getItem('truckDetailsSidebarVisible') === 'true';
+        if (sidebarVisible) {
+            truckDetailsSection.classList.remove('d-none');
+            tableSection.classList.remove('col-md-12');
+            tableSection.classList.add('col-md-10');
+            toggleBtn.classList.remove('btn-outline-secondary');
+            toggleBtn.classList.add('btn-secondary');
+        }
+
+        toggleBtn.addEventListener('click', function() {
+            const isHidden = truckDetailsSection.classList.contains('d-none');
+
+            if (isHidden) {
+                // Show sidebar
+                truckDetailsSection.classList.remove('d-none');
+                tableSection.classList.remove('col-md-12');
+                tableSection.classList.add('col-md-10');
+                toggleBtn.classList.remove('btn-outline-secondary');
+                toggleBtn.classList.add('btn-secondary');
+                localStorage.setItem('truckDetailsSidebarVisible', 'true');
+            } else {
+                // Hide sidebar
+                truckDetailsSection.classList.add('d-none');
+                tableSection.classList.remove('col-md-10');
+                tableSection.classList.add('col-md-12');
+                toggleBtn.classList.remove('btn-secondary');
+                toggleBtn.classList.add('btn-outline-secondary');
+                localStorage.setItem('truckDetailsSidebarVisible', 'false');
+            }
         });
 
         const checkboxes = document.querySelectorAll('.order-row input[type="checkbox"]');
@@ -917,6 +959,11 @@
 
     table.table thead th {
         background: #f8f9fa;
+        font-size: 0.65rem!important;
+    }
+
+    table.table thead th span {
+        font-size: 0.65rem;
     }
 
     /* Sticky columns - OVERRIDE everything */
@@ -1059,5 +1106,32 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    /* Smooth transition for sidebar toggle */
+    #tableSection,
+    #truckDetailsSection {
+        transition: all 0.3s ease;
+    }
+
+    /* Two-row record styling */
+    /* Remove bottom border from row 1 to visually connect with row 2 */
+    table.table tbody tr.order-row-1 td {
+        border-bottom: none !important;
+    }
+
+    /* Add thicker bottom border on row 2 to separate records */
+    table.table tbody tr.order-row-2 td {
+        border-bottom: 2px solid #adb5bd !important;
+    }
+
+    /* Different background for row 2 */
+    table.table tbody tr.order-row-2 td {
+        background-color: #f8f9fa !important;
+    }
+
+    /* Row 1 background */
+    table.table tbody tr.order-row-1 td {
+        background-color: #fff !important;
     }
 </style>
