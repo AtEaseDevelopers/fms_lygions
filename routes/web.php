@@ -31,6 +31,8 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('truck', TruckController::class);
     Route::resource('activity-log', ActivityLogController::class);
     Route::resource('consignment-order', ConsignmentController::class);
+    Route::post('/consignment-order/store-inline', [ConsignmentController::class, 'storeInline'])
+    ->name('consignment-order.store-inline');
     Route::post('/consignment-order/bulk-update', [ConsignmentController::class, 'bulkUpdate'])
     ->name('consignment-order.bulk-update');
     Route::resource('truck-summary', TruckSummaryController::class);

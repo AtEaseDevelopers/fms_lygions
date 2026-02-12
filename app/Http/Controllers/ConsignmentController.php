@@ -26,6 +26,7 @@ class ConsignmentController extends Controller
         $sortBy = $request->get('sort_by', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
 
+        // Date range filter
         if ($request->filled('filter_daterange')) {
             $dates = explode(' to ', $request->filter_daterange);
             if (count($dates) === 2) {
@@ -35,9 +36,43 @@ class ConsignmentController extends Controller
             }
         }
 
+        // Status filter
+        if ($request->filled('status')) {
+            $query->where('status', 'LIKE', '%' . $request->status . '%');
+        }
+
+        // Truck type filter
+        if ($request->filled('truck_type')) {
+            $query->where(function ($q) use ($request) {
+                $q->where('pick_truck_type', 'LIKE', '%' . $request->truck_type . '%')
+                    ->orWhere('drop_truck_type', 'LIKE', '%' . $request->truck_type . '%');
+            });
+        }
+
+        // Truck number filter
+        if ($request->filled('truck_number')) {
+            $query->where('truck_number', $request->truck_number);
+        }
+
+        // Search filter (searches across multiple fields)
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('consignment_no', 'LIKE', "%{$search}%")
+                    ->orWhere('consignor', 'LIKE', "%{$search}%")
+                    ->orWhere('consignee', 'LIKE', "%{$search}%")
+                    ->orWhere('pick_point', 'LIKE', "%{$search}%")
+                    ->orWhere('drop_point', 'LIKE', "%{$search}%")
+                    ->orWhere('truck_number', 'LIKE', "%{$search}%")
+                    ->orWhere('remarks', 'LIKE', "%{$search}%");
+            });
+        }
+
         $query->orderBy($sortBy, $sortOrder);
 
         $consignments = $query->paginate($perPage);
+
+        // ... rest of your existing code for trucks calculation ...
 
         $trucks_no = Truck::select('id', 'number', 'group', 'tonnage', 'floor_space')->get();
         $trucks_grp = $trucks_no->pluck('group')->unique()->values();
@@ -46,24 +81,20 @@ class ConsignmentController extends Controller
         foreach ($trucks_no as $truck) {
             $csn = Consignment::where('truck_number', $truck->number)->get();
 
-
             $used = $csn->sum(function ($c) use ($unitSpaces) {
                 $parseToArray = function ($v) {
-                    // Handle JSON string
                     if (is_string($v)) {
                         $decoded = json_decode($v, true);
                         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                             return array_map('trim', $decoded);
                         }
                     }
-                    // Handle already-array or comma-separated fallback
                     return is_array($v) ? $v : array_map('trim', explode(',', (string) $v));
                 };
 
                 $qtys = $parseToArray($c->quantity);
                 $unitStrings = $parseToArray($c->unit);
 
-                // Map units to numeric spaces
                 $units = array_map(function ($u) use ($unitSpaces) {
                     $key = trim($u);
                     return isset($unitSpaces[$key]) ? (float) $unitSpaces[$key] : 0;
@@ -78,7 +109,6 @@ class ConsignmentController extends Controller
                     $balance += $q * $u;
                 }
 
-
                 return $balance;
             });
 
@@ -87,12 +117,11 @@ class ConsignmentController extends Controller
             $truck->utilization = (float) $truck->floor_space > 0
                 ? ($used / (float) $truck->floor_space) * 100
                 : 0;
-
         }
-         $customers = Customer::all();
-        return view('consignment.order', compact('customers','consignments', 'trucks_no', 'trucks_grp'));
-    }
 
+        $customers = Customer::all();
+        return view('consignment.order', compact('customers', 'consignments', 'trucks_no', 'trucks_grp'));
+    }
 
 
     public function archivedIndex(Request $request)
@@ -303,6 +332,111 @@ class ConsignmentController extends Controller
             'icon' => 'success',
             'title' => 'Created!',
             'text' => 'Consignment order created successfully.'
+        ]);
+    }
+
+    public function storeInline(Request $request)
+    {
+        $request->validate([
+            'load_date' => 'required|date',
+            'consignor' => 'required|string|max:255',
+            'consignee' => 'required|string|max:255',
+            'pick_point' => 'required|string',
+            'drop_point' => 'required|string',
+            'pick_truck_type' => 'nullable|string',
+            'drop_truck_type' => 'nullable|string',
+            'truck_number' => 'nullable|string|max:50',
+            'status' => 'nullable|string|max:50',
+            'pick_truck_size' => 'nullable|string',
+            'drop_truck_size' => 'nullable|string',
+            'pick_time' => 'nullable|string',
+            'quantity' => 'nullable|array',
+            'quantity.*' => 'nullable|integer|min:1',
+            'unit' => 'nullable|array',
+            'unit.*' => 'nullable|string',
+            'remarks' => 'nullable|string',
+            'pre_pick' => 'nullable|string',
+            'billing_remark' => 'nullable|string',
+        ]);
+
+        $date = Carbon::now('Asia/Kuala_Lumpur');
+        $dateCode = $date->format('dm');
+
+        $lastConsignment = Consignment::whereDate('created_at', $date->toDateString())
+            ->orderBy('id', 'desc')
+            ->first();
+
+        $newIndex = $lastConsignment
+            ? str_pad(((int) substr($lastConsignment->consignment_no, -4)) + 1, 4, '0', STR_PAD_LEFT)
+            : '0001';
+
+        $consignmentNumber = 'CSN. ' . $dateCode . '-' . $newIndex;
+
+        $quantityJson = !empty($request->quantity) ? json_encode($request->quantity) : json_encode([]);
+        $unitJson = !empty($request->unit) ? json_encode($request->unit) : json_encode([]);
+
+        $consignment = Consignment::create([
+            'load_date' => $request->load_date,
+            'consignment_no' => $consignmentNumber,
+            'consignor' => $request->consignor,
+            'consignee' => $request->consignee,
+            'pick_point' => $request->pick_point,
+            'drop_point' => $request->drop_point,
+            'pick_time' => $request->pick_time,
+            'remarks' => $request->remarks,
+            'billing_remark' => $request->billing_remark,
+            'pre_pick' => $request->pre_pick,
+            'pick_truck_type' => $request->pick_truck_type,
+            'drop_truck_type' => $request->drop_truck_type,
+            'truck_number' => $request->truck_number,
+            'pick_truck_size' => $request->pick_truck_size,
+            'drop_truck_size' => $request->drop_truck_size,
+            'quantity' => $quantityJson,
+            'pick_address' => $request->pick_address,
+            'drop_address' => $request->drop_address,
+            'unit' => $unitJson,
+            'status' => $request->status ?? 'Pending',
+            'express_mode' => $request->has('express_mode'),
+        ]);
+
+        // Express mode logic (same as your store method)
+        if ($request->has('express_mode')) {
+            $loadDate = Carbon::parse($request->load_date);
+            $currentDate = $loadDate->copy()->addDay();
+            $nextLocation = (strtoupper($request->pick_point) === 'Singapore') ? 'SG' : 'MY';
+            $truckId = null;
+            $subconId = null;
+
+            if ($request->truck_number) {
+                $truckId = Truck::where('number', $request->truck_number)->value('id');
+            }
+
+            if (!$truckId && $request->pick_truck) {
+                $subconId = Subcon::where('truck_no', $request->pick_truck)->value('id');
+            }
+
+            if ($truckId || $subconId) {
+                while (true) {
+                    $query = Availability::query()->whereDate('date', $currentDate->toDateString());
+                    if ($truckId) {
+                        $query->where('truck_id', $truckId);
+                    } else {
+                        $query->where('subcon_id', $subconId);
+                    }
+                    $availability = $query->first();
+                    if (!$availability || strtolower($availability->status) !== 'available') {
+                        break;
+                    }
+                    $availability->update(['location' => $availability->location === 'SG' ? 'MY' : 'SG']);
+                    $currentDate->addDay();
+                }
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Consignment order created successfully.',
+            'consignment' => $consignment
         ]);
     }
 

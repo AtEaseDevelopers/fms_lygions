@@ -90,7 +90,7 @@
                     <div class="col-md-6">
                         <label class="form-label fw-bold">Pre-Pick</label>
                         <select class="form-select" name="pre_pick">
-                            <option value="" disabled {{ empty($order['pre_pick']) ? 'selected' : '' }}>-- Select
+                            <option value="" {{ empty($order['pre_pick']) ? 'selected' : '' }}>-- Select
                                 Pre-Pick --</option>
                             <option value="SELF" {{ $order['pre_pick'] === 'SELF' ? 'selected' : '' }}>SELF</option>
                             <option value="WVS 5404" {{ $order['pre_pick'] === 'WVS 5404' ? 'selected' : '' }}>WVS

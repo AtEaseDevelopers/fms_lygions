@@ -108,7 +108,7 @@
                     <div class="col-md-6">
                         <label class="form-label fw-bold">Pre-Pick</label>
                         <select class="form-select" name="pre_pick">
-                            <option value="" disabled selected>-- Select Pre-Pick --</option>
+                            <option value="" selected>-- Select Pre-Pick --</option>
                             <option value="SELF">SELF</option>
                             <option value="WVS 5404">WVS 5404 (1 Ton, Box Truck)</option>
                             <option value="NCR 8825">NCR 8825 (3 Tons, Curtain Truck)</option>

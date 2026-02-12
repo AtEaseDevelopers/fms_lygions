@@ -5,6 +5,10 @@
     @php
         use App\Models\Truck;
         use App\Models\Subcon;
+        use App\Models\Customer;
+        use App\Models\DraftCustomer;
+        use App\Models\Unit;
+
         $trucks = Truck::select('number', 'chassis_type', 'size')->get();
         $subcons = Subcon::select('truck_no', 'chassis_type', 'size')->get();
         $currentPage = $consignments->currentPage();
@@ -12,6 +16,29 @@
         $query = request()->query();
         unset($query['page']);
         unset($query['per_page']);
+
+        $trucks = Truck::select('number', 'chassis_type', 'size')->get();
+        $subcons = Subcon::select('truck_no', 'chassis_type', 'size')->get();
+
+        $consignors = Customer::where('type', 'Consignor')
+            ->pluck('name')
+            ->merge(DraftCustomer::where('type', 'Consignor')->where('migrated', false)->pluck('name'))
+            ->unique()
+            ->sort()
+            ->values()
+            ->toArray();
+
+        $consignees = Customer::where('type', 'Consignee')
+            ->pluck('name')
+            ->merge(DraftCustomer::where('type', 'Consignee')->where('migrated', false)->pluck('name'))
+            ->unique()
+            ->sort()
+            ->values()
+            ->toArray();
+
+        $truckGroups = Truck::select('chassis_type')->distinct()->pluck('chassis_type')->filter()->values()->toArray();
+
+        $units = Unit::all();
     @endphp
     @if (session('swal'))
         <script>
@@ -36,12 +63,16 @@
                                 <input type="text" name="filter_daterange" class="form-control" id="filter_daterange"
                                     value="{{ request('filter_daterange') }}" placeholder="Filter Date Range"
                                     autocomplete="off">
-
                                 <span class="input-group-text"><i class="nc-icon nc-calendar-60"></i></span>
+                                <button type="button" class="btn btn-outline-info " id="searchDateBtn"
+                                    style="border-radius:12rem; margin-left: 0.5rem;">
+                                    <i class="bi bi-search"></i>
+                                </button>
                             </div>
 
                             <div class="input-group no-border w-100">
-                                <input type="text" class="form-control" placeholder="Search..." name="search">
+                                <input type="text" class="form-control" placeholder="Search..." name="search"
+                                    value="{{ request('search') }}">
                                 <div class="input-group-append">
                                     <span class="input-group-text"><i class="nc-icon nc-zoom-split"></i></span>
                                 </div>
@@ -49,8 +80,8 @@
 
                             <div class="input-group">
                                 <select name="status" id="statusFilter" class="form-select text-white">
-                                    <option value="" disabled {{ request('status') ? '' : 'selected' }}
-                                        style="background-color: #ffffff">Select Status
+                                    <option value="" {{ !request('status') ? 'selected' : '' }}
+                                        style="background-color: #ffffff; color: #000;">Select Status
                                     </option>
                                     <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}
                                         style="background-color: #6c757d">Pending
@@ -66,23 +97,30 @@
 
                             <div class="input-group">
                                 <select name="truck_type" id="truckType" class="form-select">
-                                    <option value="" disabled selected>Truck Type</option>
-                                    <option value="40">40 ft</option>
-                                    <option value="20">20 ft</option>
+                                    <option value="" {{ !request('truck_type') ? 'selected' : '' }}>Truck Type
+                                    </option>
+                                    <option value="40" {{ request('truck_type') == '40' ? 'selected' : '' }}>40 ft
+                                    </option>
+                                    <option value="20" {{ request('truck_type') == '20' ? 'selected' : '' }}>20 ft
+                                    </option>
                                 </select>
                             </div>
 
                             <div class="input-group">
                                 <select name="truck_number" id="truckNumber" class="form-select">
-                                    <option value="" disabled selected>Truck Number</option>
+                                    <option value="" {{ !request('truck_number') ? 'selected' : '' }}>Truck Number
+                                    </option>
                                     @foreach ($trucks_no as $truck)
-                                        <option value="{{ $truck }}">{{ $truck }}</option>
+                                        <option value="{{ $truck->number }}"
+                                            {{ request('truck_number') == $truck->number ? 'selected' : '' }}>
+                                            {{ $truck->number }}
+                                        </option>
                                     @endforeach
                                 </select>
                             </div>
 
                             <div class="input-group" style="width: 5%">
-                                <button type="reset" class="btn btn-danger d-none" style="margin: 0;" id="clearBtn">
+                                <button type="button" class="btn btn-danger" style="margin: 0;" id="clearBtn">
                                     <i class="bi bi-x"></i>
                                 </button>
                             </div>
@@ -95,6 +133,11 @@
                                     style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
                                     <i class="bi bi-save me-1" style="font-size: 20px;"></i>
                                     Save
+                                </button>
+                                <button type="button" class="btn btn-success" id="addInlineRowBtn"
+                                    style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
+                                    <i class="bi bi-plus-circle me-1" style="font-size: 20px;"></i>
+                                    Add Row
                                 </button>
                                 <button type="button" class="btn btn-outline-secondary" id="toggleTruckDetails"
                                     style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
@@ -302,7 +345,7 @@
                                         {{-- <td>{{ $order['consignment_no'] ?? '-' }}</td> --}}
                                         <td class="sticky-col">
                                             @php
-                                               
+
                                                 // Get consignor display name
                                                 $consignorDisplay = '-';
                                                 if (!empty($order['consignor'])) {
@@ -593,6 +636,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
         tooltipTriggerList.map(function(tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl);
@@ -651,8 +695,7 @@
                 .filter(cb => cb.checked)
                 .map(cb => {
                     const row = cb.closest('tr');
-                    const consignmentId = row.dataset
-                        .id; // <-- Make sure your <tr> has data-id="{{ $order->id }}"
+                    const consignmentId = row.dataset.id;
                     const select = row.querySelector('.truck-number-select');
                     const truckNumber = select ? select.value : '';
                     return {
@@ -805,49 +848,135 @@
             const table = document.querySelector("table.table");
             if (!table) return;
 
-            const firstRow = table.querySelector("thead tr");
-            if (!firstRow) return;
+            const firstRow = table.querySelector("tbody tr:first-child");
+            const headerRow = table.querySelector("thead tr");
 
-            const cells = firstRow.querySelectorAll("th");
+            if (!firstRow && !headerRow) return;
+
+            // Use tbody row if available, otherwise use thead
+            const cells = firstRow ? firstRow.querySelectorAll("td.sticky-col") : headerRow
+                .querySelectorAll("th.sticky-col");
+
             let offset = 0;
 
-            for (let i = 0; i < Math.min(7, cells.length); i++) {
-                const width = Math.round(cells[i].getBoundingClientRect().width);
-
-                if (i > 0) {
-                    document.documentElement.style.setProperty(`--col-${i}`, offset + "px");
+            cells.forEach((cell, index) => {
+                if (index > 0) {
+                    document.documentElement.style.setProperty(`--col-${index}`, offset + "px");
                 }
 
+                const width = Math.round(cell.getBoundingClientRect().width);
                 offset += width;
-            }
-        }, 100);
+            });
+        }, 150);
 
         // Initialize daterangepicker
         const daterangeInput = $('#filter_daterange');
         const filterForm = $('#filterForm');
-        const clearBtn = $('#clearBtn');
+        const searchDateBtn = $('#searchDateBtn');
 
+        // Get initial value from input (Blade)
+        let initialValue = daterangeInput.val();
+        let startDate = moment().startOf('day');
+        let endDate = moment().endOf('day');
+
+        if (initialValue) {
+            const dates = initialValue.split(' to ');
+            if (dates.length === 2) {
+                startDate = moment(dates[0], 'YYYY-MM-DD');
+                endDate = moment(dates[1], 'YYYY-MM-DD');
+            }
+        }
+
+        // Initialize daterangepicker
         daterangeInput.daterangepicker({
-            autoUpdateInput: false,
+            startDate: startDate,
+            endDate: endDate,
+            autoUpdateInput: !!initialValue,
             locale: {
+                format: 'YYYY-MM-DD',
                 cancelLabel: 'Clear',
-                format: 'YYYY-MM-DD'
+                applyLabel: 'Apply'
+            },
+            opens: 'right',
+            autoApply: false
+        });
+
+        // When date range is applied, just update the input (don't submit yet)
+        daterangeInput.on('apply.daterangepicker', function(ev, picker) {
+            const selectedRange = picker.startDate.format('YYYY-MM-DD') + ' to ' + picker.endDate
+                .format('YYYY-MM-DD');
+            $(this).val(selectedRange);
+            updateClearButton();
+        });
+
+        // When date range is cleared
+        daterangeInput.on('cancel.daterangepicker', function(ev, picker) {
+            $(this).val('');
+            updateClearButton();
+        });
+
+        // Search button for date range - THIS SUBMITS THE FORM
+        searchDateBtn.on('click', function() {
+            if (daterangeInput.val()) {
+                filterForm.submit();
+            } else {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'No Date Selected',
+                    text: 'Please select a date range first',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
             }
         });
 
-        daterangeInput.on('apply.daterangepicker', function(ev, picker) {
-            $(this).val(picker.startDate.format('YYYY-MM-DD') + ' to ' + picker.endDate.format(
-                'YYYY-MM-DD'));
+        // Other filters trigger submit immediately
+        $('#statusFilter, #truckType, #truckNumber').on('change', function() {
             filterForm.submit();
         });
 
-        daterangeInput.on('cancel.daterangepicker', function() {
-            $(this).val('');
-            filterForm.submit();
+        // Search triggers submit on Enter
+        $('input[name="search"]').on('keypress', function(e) {
+            if (e.key === 'Enter' || e.keyCode === 13) {
+                e.preventDefault();
+                filterForm.submit();
+            }
         });
 
-        $('#statusFilter, #truckType, #truckNumber, input[name="search"]').on('change keyup', function() {
-            filterForm.submit();
+        // Clear button functionality
+        $('#clearBtn').on('click', function() {
+            // Clear all form inputs
+            daterangeInput.val('');
+            $('input[name="search"]').val('');
+            $('#statusFilter').val('');
+            $('#truckType').val('');
+            $('#truckNumber').val('');
+
+            // Redirect to base URL without any filters
+            window.location.href = "{{ route('consignment-order.index') }}";
+        });
+
+        // Show/hide clear button based on active filters
+        function updateClearButton() {
+            const hasFilters = daterangeInput.val() ||
+                $('input[name="search"]').val() ||
+                $('#statusFilter').val() ||
+                $('#truckType').val() ||
+                $('#truckNumber').val();
+
+            if (hasFilters) {
+                $('#clearBtn').removeClass('d-none');
+            } else {
+                $('#clearBtn').addClass('d-none');
+            }
+        }
+
+        // Check on page load
+        updateClearButton();
+
+        // Check when filters change
+        $('#filterForm input, #filterForm select').on('change input', function() {
+            updateClearButton();
         });
 
         // Delete form confirmation
@@ -917,6 +1046,299 @@
                 }
             }
         });
+        // Add Inline Row functionality
+        const addInlineRowBtn = document.getElementById('addInlineRowBtn');
+        const tableBody = document.querySelector('table.table tbody');
+
+        // Get consignor and consignee lists from PHP
+        const CONSIGNORS = @json($consignors ?? []);
+        const CONSIGNEES = @json($consignees ?? []);
+        const TRUCK_GROUPS = @json($truckGroups ?? []);
+        const UNITS = @json($units ?? []);
+
+        function recalculateStickyColumns() {
+            setTimeout(function() {
+                const table = document.querySelector("table.table");
+                if (!table) return;
+
+                // Use the first data row (not the inline edit row) for measurements
+                const firstRow = table.querySelector("tbody tr:not(.inline-edit-row)");
+                const headerRow = table.querySelector("thead tr");
+
+                if (!firstRow && !headerRow) return;
+
+                // Prefer data row for measurement, fallback to header
+                const cells = firstRow ? firstRow.querySelectorAll("td.sticky-col") : headerRow
+                    .querySelectorAll("th.sticky-col");
+
+                let offset = 0;
+
+                cells.forEach((cell, index) => {
+                    if (index > 0) {
+                        document.documentElement.style.setProperty(`--col-${index}`, offset +
+                            "px");
+                    }
+
+                    const width = Math.round(cell.getBoundingClientRect().width);
+                    offset += width;
+                });
+
+                console.log('Sticky columns recalculated'); // Debug log
+            }, 150); // Increased timeout to ensure DOM is fully rendered
+        }
+
+        addInlineRowBtn.addEventListener('click', function() {
+            // Check if there's already an inline edit row
+            if (document.querySelector('.inline-edit-row')) {
+                Swal.fire('Warning', 'Please save or cancel the current row first', 'warning');
+                return;
+            }
+
+            // Build units options safely
+            let unitsOptions = '<option value="">-</option>';
+            if (UNITS && Array.isArray(UNITS)) {
+                unitsOptions += UNITS.map(u => {
+                    const unitUpper = (u.unit || '').toUpperCase();
+                    const unitDesc = u.desc || '';
+                    return `<option value="${u.unit}">${unitUpper} — ${unitDesc}</option>`;
+                }).join('');
+            }
+
+            // Build truck groups options
+            let truckGroupsOptions = '<option value="">-</option><option value="all">ALL</option>';
+            if (TRUCK_GROUPS && Array.isArray(TRUCK_GROUPS)) {
+                truckGroupsOptions += TRUCK_GROUPS.map(g => `<option value="${g}">${g}</option>`).join(
+                    '');
+            }
+
+            // Build consignor options
+            let consignorOptions = '';
+            if (CONSIGNORS && Array.isArray(CONSIGNORS)) {
+                consignorOptions = CONSIGNORS.map(c => `<option value="${c}"></option>`).join('');
+            }
+
+            // Build consignee options
+            let consigneeOptions = '';
+            if (CONSIGNEES && Array.isArray(CONSIGNEES)) {
+                consigneeOptions = CONSIGNEES.map(c => `<option value="${c}"></option>`).join('');
+            }
+
+            // Build truck options
+            let truckOptions = '<option value="">-</option>';
+            if (ALL_TRUCKS && Array.isArray(ALL_TRUCKS)) {
+                truckOptions += ALL_TRUCKS.map(t => `<option value="${t.number}">${t.number}</option>`)
+                    .join('');
+            }
+            if (ALL_SUBCONS && Array.isArray(ALL_SUBCONS)) {
+                truckOptions += ALL_SUBCONS.map(s =>
+                    `<option value="${s.truck_no}">${s.truck_no} (Subcon)</option>`).join('');
+            }
+
+            // Create new editable row
+            const newRow = document.createElement('tr');
+            newRow.classList.add('inline-edit-row', 'table-warning');
+            newRow.innerHTML = `
+        <td class="sticky-col">
+            <div class="d-flex align-items-center gap-2 justify-content-center">
+                <button type="button" class="btn btn-sm btn-success save-inline-row">
+                    <i class="bi bi-check-lg"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-danger cancel-inline-row">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </td>
+        <td class="sticky-col">NEW</td>
+        <td class="sticky-col">
+            <input type="date" class="form-control form-control-sm" name="load_date" required>
+        </td>
+        <td class="sticky-col">
+            <input name="consignor" list="inline_consignor_list" class="form-control form-control-sm"
+                   placeholder="Consignor" required>
+            <datalist id="inline_consignor_list">
+                ${consignorOptions}
+            </datalist>
+        </td>
+        <td class="sticky-col">
+            <input type="text" class="form-control form-control-sm" name="pick_point" placeholder="Pick Point" required>
+        </td>
+        <td class="sticky-col">
+            <input name="consignee" list="inline_consignee_list" class="form-control form-control-sm"
+                   placeholder="Consignee" required>
+            <datalist id="inline_consignee_list">
+                ${consigneeOptions}
+            </datalist>
+        </td>
+        <td class="sticky-col">
+            <input type="text" class="form-control form-control-sm" name="drop_point" placeholder="Drop Point" required>
+        </td>
+        <td>
+            <select class="form-select form-select-sm" name="pick_truck_size">
+                <option value="">-</option>
+                <option value="Small">Small</option>
+                <option value="Any">Any</option>
+            </select>
+        </td>
+        <td>
+            <select class="form-select form-select-sm" name="drop_truck_size">
+                <option value="">-</option>
+                <option value="Small">Small</option>
+                <option value="Any">Any</option>
+            </select>
+        </td>
+        <td>
+            <select class="form-select form-select-sm" name="pick_truck_type">
+                ${truckGroupsOptions}
+            </select>
+        </td>
+        <td>
+            <select class="form-select form-select-sm" name="drop_truck_type">
+                ${truckGroupsOptions}
+            </select>
+        </td>
+        <td>
+            <input type="time" class="form-control form-control-sm" name="pick_time">
+        </td>
+        <td>
+            <input type="number" class="form-control form-control-sm" name="quantity" placeholder="Qty">
+        </td>
+        <td>
+            <select class="form-select form-select-sm" name="unit">
+                ${unitsOptions}
+            </select>
+        </td>
+        <td>
+            <select class="form-select form-select-sm" name="pre_pick">
+                <option value="">-</option>
+                <option value="SELF">SELF</option>
+                <option value="WVS 5404">WVS 5404</option>
+                <option value="NCR 8825">NCR 8825</option>
+                <option value="BSG 8826">BSG 8826</option>
+            </select>
+        </td>
+        <td>
+            <select class="form-select form-select-sm" name="truck_number">
+                ${truckOptions}
+            </select>
+        </td>
+        <td>
+            <input type="text" class="form-control form-control-sm" name="remarks" placeholder="Remarks">
+        </td>
+        <td>
+            <input type="text" class="form-control form-control-sm" name="billing_remark" placeholder="Billing Remarks">
+        </td>
+        <td>
+            <select class="form-select form-select-sm" name="status">
+                <option value="Pending" selected>Pending</option>
+                <option value="Planning">Planning</option>
+                <option value="Completed">Completed</option>
+            </select>
+        </td>
+    `;
+
+            // Insert at the top of tbody
+            tableBody.insertBefore(newRow, tableBody.firstChild);
+
+            // Recalculate sticky column positions
+            recalculateStickyColumns();
+
+            // Disable add button while editing
+            addInlineRowBtn.disabled = true;
+
+            // Scroll to top
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+
+        // Event delegation for save/cancel buttons
+        tableBody.addEventListener('click', function(e) {
+            // Save inline row
+            if (e.target.closest('.save-inline-row')) {
+                const row = e.target.closest('.inline-edit-row');
+                const formData = new FormData();
+
+                // Collect all input values
+                row.querySelectorAll('input, select').forEach(input => {
+                    if (input.name) {
+                        formData.append(input.name, input.value);
+                    }
+                });
+
+                // Validate required fields
+                const loadDate = row.querySelector('[name="load_date"]').value;
+                const consignor = row.querySelector('[name="consignor"]').value;
+                const consignee = row.querySelector('[name="consignee"]').value;
+                const pickPoint = row.querySelector('[name="pick_point"]').value;
+                const dropPoint = row.querySelector('[name="drop_point"]').value;
+
+                if (!loadDate || !consignor || !consignee || !pickPoint || !dropPoint) {
+                    Swal.fire('Error', 'Please fill in all required fields', 'error');
+                    return;
+                }
+
+                // Show loading
+                Swal.fire({
+                    title: 'Saving...',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                // Submit via AJAX
+                fetch("{{ route('consignment-order.store-inline') }}", {
+                        method: "POST",
+                        headers: {
+                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
+                        },
+                        body: formData
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Created!',
+                                text: data.message,
+                                timer: 2000,
+                                showConfirmButton: false
+                            }).then(() => {
+                                location.reload();
+                            });
+                        } else {
+                            Swal.fire('Error', data.message || 'Failed to create order', 'error');
+                            addInlineRowBtn.disabled = false;
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        Swal.fire('Error', 'Failed to create order', 'error');
+                        addInlineRowBtn.disabled = false;
+                    });
+            }
+
+            // Cancel inline row
+            if (e.target.closest('.cancel-inline-row')) {
+                const row = e.target.closest('.inline-edit-row');
+                Swal.fire({
+                    title: 'Discard changes?',
+                    text: 'This new row will be removed',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, discard',
+                    cancelButtonText: 'No, keep editing'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        row.remove();
+                        addInlineRowBtn.disabled = false;
+                        // Recalculate sticky columns after removing row
+                        recalculateStickyColumns();
+                    }
+                });
+            }
+        });
     });
 </script>
 
@@ -925,6 +1347,58 @@
 <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
 <style>
+    /* Inline editing row styles */
+    .inline-edit-row {
+        background-color: #fff3cd !important;
+    }
+
+    .inline-edit-row td {
+        background-color: #fff3cd !important;
+        padding: 0.5rem 0.4rem !important;
+    }
+
+    .inline-edit-row input,
+    .inline-edit-row select {
+        font-size: 0.75rem;
+        min-width: 100px;
+    }
+
+    .inline-edit-row .sticky-col {
+        background-color: #fff3cd !important;
+    }
+
+    .inline-edit-row td.sticky-col:nth-child(1) {
+        width: 80px;
+        min-width: 80px;
+        max-width: 80px;
+    }
+
+    .inline-edit-row td.sticky-col:nth-child(2) {
+        width: 50px;
+        min-width: 50px;
+        max-width: 50px;
+    }
+
+    .inline-edit-row td.sticky-col:nth-child(3) {
+        width: 150px;
+        min-width: 150px;
+    }
+
+    .inline-edit-row td.sticky-col:nth-child(4),
+    .inline-edit-row td.sticky-col:nth-child(5),
+    .inline-edit-row td.sticky-col:nth-child(6),
+    .inline-edit-row td.sticky-col:nth-child(7) {
+        width: 180px;
+        min-width: 180px;
+    }
+
+    /* Match input widths to cell widths */
+    .inline-edit-row input.form-control-sm,
+    .inline-edit-row select.form-select-sm {
+        width: 100%;
+        box-sizing: border-box;
+    }
+
     /* Fix border collapse issue with sticky columns */
     table.table {
         border-collapse: separate !important;
@@ -959,7 +1433,7 @@
 
     table.table thead th {
         background: #f8f9fa;
-        font-size: 0.65rem!important;
+        font-size: 0.65rem !important;
     }
 
     table.table thead th span {

@@ -32,9 +32,30 @@
 
                 </div>
                 <h5 class="fw-bold">Truck Details</h5>
+
                 @php
                     $sorted = collect($trucks)->filter(fn($t) => ($t['used'] ?? 0) > 0)->sortBy('used');
+
+                    // Calculate totals
+                    $totalUsed = $sorted->sum('used');
+                    $totalSpace = $sorted->sum('space');
+                    $overallUtilization = $totalSpace > 0 ? ($totalUsed / $totalSpace) * 100 : 0;
                 @endphp
+
+                <!-- Total Summary Card -->
+                <div class="card mb-3 p-3 bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>Total Used:</strong>
+                            <span class="text-primary">{{ number_format($totalUsed, 2) }}</span> /
+                            {{ number_format($totalSpace, 0) }}
+                        </div>
+                        {{-- <div class="text-end">
+                            <span class="badge bg-primary fs-6">{{ round($overallUtilization) }}% Utilized</span>
+                        </div> --}}
+                    </div>
+                </div>
+
 
                 @foreach ($sorted as $truck)
                     @php
