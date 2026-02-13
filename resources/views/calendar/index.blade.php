@@ -157,7 +157,7 @@
                                 <div>
                                     <span
                                         class="{{ ($date['MY']['balance'] ?? 0) > ($date['MY']['origin'] ?? 0) ? 'text-danger' : '' }} {{ $myColor }}">
-                                        {{ number_format($date['MY']['balance'] ?? 0, 1) }}
+                                        {{ number_format(($date['MY']['origin'] ?? 0) - ($date['MY']['balance'] ?? 0), 1) }}
                                         <span style="color: black">/
                                             {{ number_format($date['MY']['origin'] ?? 0, 1) }}</span>
 
@@ -166,7 +166,7 @@
                                 <div hidden>
                                     <span
                                         class="{{ ($date['SG']['balance'] ?? 0) > ($date['SG']['origin'] ?? 0) ? 'text-danger' : '' }} {{ $sgColor }}">
-                                        {{ number_format($date['SG']['balance'] ?? 0, 1) }}
+                                        {{ number_format(($date['SG']['origin'] ?? 0) - ($date['SG']['balance'] ?? 0), 1) }}
                                         <span style="color: black">/
                                             {{ number_format($date['SG']['origin'] ?? 0, 1) }}</span>
                                     </span>
@@ -358,8 +358,8 @@
                         <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
                             style="background-color: #ffffff">
                             <div>
-                                <div class="fw-bold fs-4">{{ number_format($totalMyUsed, 1) }}</div>
-                                <div class="small">MY Used</div>
+                                <div class="fw-bold fs-4">{{ number_format($totalMyCapacity - $totalMyUsed, 1) }}</div>
+                                <div class="small">MY Unused</div>
                             </div>
                             <i class="bi bi-speedometer2 fs-2 position-absolute top-0 end-0 m-2"
                                 style="color: #f7c6c7;"></i>
@@ -370,8 +370,8 @@
                     <div class="col-12 col-md-2">
                         @php
                             $myUtilizationColor = match (true) {
-                                $myUtilization > 70 => 'text-danger',
-                                $myUtilization > 30 => 'text-warning',
+                                $myUtilization < 30 => 'text-danger',
+                                $myUtilization < 70 => 'text-warning',
                                 default => 'text-success',
                             };
                         @endphp

@@ -1,5 +1,10 @@
 @extends('component.layout')
-@section('title', 'Archived Consignment Order')
+@section('title', 'Archived Truck Planning')
+@section('back_button')
+    <a href="{{ route('consignment-order.index') }}" class="btn btn-outline-secondary btn-sm" style="margin-right: 8px; border-radius: 50%; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0;">
+        <i class="bi bi-arrow-left"></i>
+    </a>
+@endsection
 @section('content')
 
     <div class="row">
@@ -64,22 +69,6 @@
 
 
                         <div class="d-flex justify-content-between align-items-center w-100">
-                            <!-- Left Buttons -->
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-primary" data-bs-toggle="modal"
-                                    data-bs-target="#addCsnModal"
-                                    style="border-radius: 0.2rem; display: inline-flex; align-items: center;" hidden>
-                                    <i class="bi bi-clipboard2-plus-fill me-1" style="font-size: 20px;"></i>
-                                    Create New Consignment Order
-                                </button>
-                                <button type="button" class="btn btn-outline-warning"
-                                    style="border-radius: 0.2rem; display: inline-flex; align-items: center;" hidden>
-                                    <i class="bi bi-archive me-1" style="font-size: 20px;"></i>
-                                    View Archived CSN
-                                </button>
-                            </div>
-
-
                         </div>
 
                     </div>

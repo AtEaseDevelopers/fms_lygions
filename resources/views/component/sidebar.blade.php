@@ -16,7 +16,7 @@ $isMasterActive =
     <div class="logo d-flex align-items-center px-3 py-2">
         <a href="#" class="d-flex align-items-center text-decoration-none">
             <div class="logo-image-small d-flex align-items-center">
-                <img src="{{ asset('img/logo-small.png') }}" alt="Logo" style="height:50px;">
+                <img src="{{ asset('img/snl_logo.png') }}" alt="Logo" style="height:50px;">
                 <span class="logo-text ms-2">FMS</span>
             </div>
         </a>

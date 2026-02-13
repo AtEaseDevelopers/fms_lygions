@@ -40,14 +40,16 @@
                     $totalUsed = $sorted->sum('used');
                     $totalSpace = $sorted->sum('space');
                     $overallUtilization = $totalSpace > 0 ? ($totalUsed / $totalSpace) * 100 : 0;
+                    $totalUnused = $totalSpace - $totalUsed;
+                    $totalColor = $overallUtilization >= 90 ? 'danger' : ($overallUtilization >= 70 ? 'warning' : 'success');
                 @endphp
 
                 <!-- Total Summary Card -->
                 <div class="card mb-3 p-3 bg-light">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <strong>Total Used:</strong>
-                            <span class="text-primary">{{ number_format($totalUsed, 2) }}</span> /
+                            <strong>Capacity:</strong>
+                            <strong class="text-{{ $totalColor }}">{{ number_format(max(0, $totalUnused), 2) }}</strong> /
                             {{ number_format($totalSpace, 0) }}
                         </div>
                         {{-- <div class="text-end">
@@ -82,7 +84,7 @@
                                 <div>
                                     Capacity:
                                     <strong class="text-{{ $color }}">
-                                        {{ number_format(max(0, $truck['used']), 2) }}
+                                        {{ number_format(max(0, $truck['balance_capacity']), 2) }}
                                     </strong> /
                                     {{ number_format($truck['space'], 0) }}
                                 </div>

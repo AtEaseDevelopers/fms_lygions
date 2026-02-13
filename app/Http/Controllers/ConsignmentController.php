@@ -27,6 +27,8 @@ class ConsignmentController extends Controller
         $sortOrder = $request->get('sort_order', 'desc');
 
         // Date range filter
+        $today = now()->format('Y-m-d');
+        $truckDate = $request->input('truck_date', $today);
         if ($request->filled('filter_daterange')) {
             $dates = explode(' to ', $request->filter_daterange);
             if (count($dates) === 2) {
@@ -34,6 +36,8 @@ class ConsignmentController extends Controller
                 $endDate = trim($dates[1]);
                 $query->whereBetween('load_date', [$startDate, $endDate]);
             }
+        } else {
+            $query->where('load_date', '>=', $today);
         }
 
         // Status filter
@@ -79,7 +83,9 @@ class ConsignmentController extends Controller
         $unitSpaces = Unit::pluck('space', 'unit')->toArray();
 
         foreach ($trucks_no as $truck) {
-            $csn = Consignment::where('truck_number', $truck->number)->get();
+            $csn = Consignment::where('truck_number', $truck->number)
+                ->where('load_date', $truckDate)
+                ->get();
 
             $used = $csn->sum(function ($c) use ($unitSpaces) {
                 $parseToArray = function ($v) {
@@ -486,6 +492,66 @@ class ConsignmentController extends Controller
         ]);
     }
 
+    public function updateInline(Request $request, $id)
+    {
+        $consignment = Consignment::findOrFail($id);
+
+        $request->validate([
+            'load_date' => 'required|date',
+            'consignor' => 'required|string|max:255',
+            'consignee' => 'required|string|max:255',
+            'pick_point' => 'required|string',
+            'drop_point' => 'required|string',
+            'pick_truck_type' => 'nullable|string',
+            'drop_truck_type' => 'nullable|string',
+            'truck_number' => 'nullable|string|max:50',
+            'status' => 'nullable|string|max:50',
+            'pick_truck_size' => 'nullable|string',
+            'drop_truck_size' => 'nullable|string',
+            'pick_time' => 'nullable|string',
+            'quantity' => 'nullable|array',
+            'quantity.*' => 'nullable|integer|min:1',
+            'unit' => 'nullable|array',
+            'unit.*' => 'nullable|string',
+            'remarks' => 'nullable|string',
+            'pre_pick' => 'nullable|string',
+            'billing_remark' => 'nullable|string',
+            'pick_address' => 'nullable|string',
+            'drop_address' => 'nullable|string',
+        ]);
+
+        $quantityJson = !empty($request->quantity) ? json_encode($request->quantity) : json_encode([]);
+        $unitJson = !empty($request->unit) ? json_encode($request->unit) : json_encode([]);
+
+        $consignment->update([
+            'load_date' => $request->load_date,
+            'consignor' => $request->consignor,
+            'consignee' => $request->consignee,
+            'pick_point' => $request->pick_point,
+            'drop_point' => $request->drop_point,
+            'pick_time' => $request->pick_time,
+            'remarks' => $request->remarks,
+            'billing_remark' => $request->billing_remark,
+            'pre_pick' => $request->pre_pick,
+            'pick_truck_type' => $request->pick_truck_type,
+            'drop_truck_type' => $request->drop_truck_type,
+            'truck_number' => $request->truck_number,
+            'pick_truck_size' => $request->pick_truck_size,
+            'drop_truck_size' => $request->drop_truck_size,
+            'quantity' => $quantityJson,
+            'unit' => $unitJson,
+            'pick_address' => $request->pick_address,
+            'drop_address' => $request->drop_address,
+            'status' => $request->status ?? 'Pending',
+            'express_mode' => $request->has('express_mode'),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Order updated successfully.',
+        ]);
+    }
+
     public function bulkUpdate(Request $request)
     {
         $orders = $request->input('orders', []);
@@ -555,6 +621,5 @@ class ConsignmentController extends Controller
             }),
         ]);
     }
-
 
 }

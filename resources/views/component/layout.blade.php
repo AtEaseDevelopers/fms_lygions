@@ -5,7 +5,7 @@
 <head>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta charset="utf-8" />
-    <link rel="icon" type="image/x-icon" href="{{ asset('img/logo-small.png') }}">
+    <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
     <title>FMS | @yield('title')</title>
     <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no'
@@ -311,10 +311,12 @@
             $('#filter_daterange').on('apply.daterangepicker', function(ev, picker) {
                 $(this).val(picker.startDate.format('YYYY-MM-DD') + ' to ' + picker.endDate.format(
                     'YYYY-MM-DD'));
+                $('#filterForm').submit();
             });
 
             $('#filter_daterange').on('cancel.daterangepicker', function(ev, picker) {
                 $(this).val('');
+                $('#filterForm').submit();
             });
         });
 

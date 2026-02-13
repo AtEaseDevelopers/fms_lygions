@@ -357,7 +357,7 @@ class CalendarController extends Controller
             'totalMyUsed' => $totMyUsed,
             'totalSgCapacity' => $totSgCap,
             'totalSgUsed' => $totSgUsed,
-            'myUtilization' => $totMyCap ? ($totMyUsed / $totMyCap) * 100 : 0,
+            'myUtilization' => $totMyCap ? (($totMyCap - $totMyUsed) / $totMyCap) * 100 : 0,
             'sgUtilization' => $totSgCap ? ($totSgUsed / $totSgCap) * 100 : 0,
         ];
     }
