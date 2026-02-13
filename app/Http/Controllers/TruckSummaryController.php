@@ -17,6 +17,7 @@ class TruckSummaryController extends Controller
     {
         // Get all trucks
         $selectedGroup = $request->get('group'); // <-- from filter
+        $selectedDate = $request->get('date', now()->format('Y-m-d'));
 
         $trucks = Truck::select('id', 'number', 'group', 'floor_space')
             ->when($selectedGroup, function ($query, $selectedGroup) {
@@ -29,7 +30,7 @@ class TruckSummaryController extends Controller
         $unitSpaces = Unit::pluck('space', 'unit')->toArray();
 
         // Fetch consignments
-        $consignments = Consignment::select(
+        $consignments = Consignment::where('load_date', $selectedDate)->select(
             'load_date',
             'consignment_no',
             'consignor',
@@ -131,7 +132,7 @@ class TruckSummaryController extends Controller
             ];
         });
 
-        return view('truck-summary.index', compact('trucks', 'csns','trucks_grp', 'selectedGroup'));
+        return view('truck-summary.index', compact('trucks', 'csns','trucks_grp', 'selectedGroup', 'selectedDate'));
     }
 
 

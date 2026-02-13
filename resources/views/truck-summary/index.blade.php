@@ -11,8 +11,8 @@
                         class="d-flex gap-3 align-items-stretch" style="width:100%;">
                         <!-- Date Filter (optional future use) -->
                         <div class="input-group">
-                            <input type="date" name="date" class="form-control" placeholder="Filter Date Range"
-                                autocomplete="off">
+                            <input type="date" name="date" class="form-control" value="{{ $selectedDate }}"
+                                autocomplete="off" onchange="document.getElementById('filterForm').submit()">
                         </div>
 
                         <!-- Truck Group Dropdown -->
@@ -50,7 +50,7 @@
                         <div>
                             <strong>Capacity:</strong>
                             <strong class="text-{{ $totalColor }}">{{ number_format(max(0, $totalUnused), 2) }}</strong> /
-                            {{ number_format($totalSpace, 0) }}
+                            {{ number_format($totalSpace, 2) }}
                         </div>
                         {{-- <div class="text-end">
                             <span class="badge bg-primary fs-6">{{ round($overallUtilization) }}% Utilized</span>

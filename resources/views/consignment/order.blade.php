@@ -556,7 +556,7 @@
             </div>
             <h4 style="margin: 0">Truck Details</h4>
             @php
-                $displayedTrucks = $trucks_no->filter(fn($t) => $t->remaining > 0);
+                $displayedTrucks = $trucks_no;
                 $totalUnused = $displayedTrucks->sum('remaining');
                 $totalCapacity = $displayedTrucks->sum('floor_space');
                 $overallUtilization = $totalCapacity > 0 ? (($totalCapacity - $totalUnused) / $totalCapacity) * 100 : 0;
@@ -573,32 +573,30 @@
             </div>
             <div id="truckCardsContainer">
                 @foreach ($trucks_no as $truck)
-                    @if ($truck->remaining > 0)
-                        @php
-                            $color =
-                                $truck->utilization >= 100 ? 'danger' : ($truck->utilization >= 90 ? 'warning' : 'success');
-                        @endphp
+                    @php
+                        $color =
+                            $truck->utilization >= 100 ? 'danger' : ($truck->utilization >= 90 ? 'warning' : 'success');
+                    @endphp
 
-                        <div class="card mb-3 p-3 truck-card" data-truck="{{ $truck->number }}">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div class="d-flex flex-column">
-                                    <h5 class="mb-2 fw-bold">{{ $truck->number }}</h5>
-                                    <div>
-                                        Capacity:
-                                        <strong
-                                            class="text-{{ $color }}">{{ number_format($truck->remaining, 2) }}</strong> /
-                                        {{ number_format($truck->floor_space, 0) }}
-                                    </div>
-                                </div>
-
-                                <div class="d-flex flex-column align-items-center text-end">
-                                    <div class="small mb-1">{{ $truck->group }}</div>
-                                    <i class="fa fa-truck fa-3x text-{{ $color }}"></i>
-                                    <div class="fw-bold text-{{ $color }}">{{ round($truck->utilization) }}%</div>
+                    <div class="card mb-3 p-3 truck-card" data-truck="{{ $truck->number }}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="d-flex flex-column">
+                                <h5 class="mb-2 fw-bold">{{ $truck->number }}</h5>
+                                <div>
+                                    Capacity:
+                                    <strong
+                                        class="text-{{ $color }}">{{ number_format($truck->remaining, 2) }}</strong> /
+                                    {{ number_format($truck->floor_space, 0) }}
                                 </div>
                             </div>
+
+                            <div class="d-flex flex-column align-items-center text-end">
+                                <div class="small mb-1">{{ $truck->group }}</div>
+                                <i class="fa fa-truck fa-3x text-{{ $color }}"></i>
+                                <div class="fw-bold text-{{ $color }}">{{ round($truck->utilization) }}%</div>
+                            </div>
                         </div>
-                    @endif
+                    </div>
                 @endforeach
             </div>
 

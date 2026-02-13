@@ -125,6 +125,16 @@ class ConsignmentController extends Controller
                 : 0;
         }
 
+        // Filter trucks to only those available or occupied on the selected truck date
+        $availableTruckIds = Availability::where('date', $truckDate)
+            ->whereIn('status', ['available', 'occupied'])
+            ->pluck('truck_id')
+            ->unique();
+
+        $trucks_no = $trucks_no->filter(function ($truck) use ($availableTruckIds) {
+            return $availableTruckIds->contains($truck->id);
+        });
+
         $customers = Customer::all();
         return view('consignment.order', compact('customers', 'consignments', 'trucks_no', 'trucks_grp'));
     }

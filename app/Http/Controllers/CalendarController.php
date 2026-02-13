@@ -48,6 +48,37 @@ class CalendarController extends Controller
         $filteredMatrix = $this->filterCalendarMatrix($calendarMatrix);
         $trucks = $trucks->filter(fn($truck) => isset($filteredMatrix[$truck->number]));
 
+        // Recalculate date header capacities from the full calendar matrix
+        $dates = $dates->map(function ($entry) use ($calendarMatrix) {
+            $dateKey = $entry['date']->format('Y-m-d');
+            $myOrigin = 0;
+            $myBalance = 0;
+            $sgOrigin = 0;
+            $sgBalance = 0;
+
+            foreach ($calendarMatrix as $truckNumber => $truckDates) {
+                if (!isset($truckDates[$dateKey])) continue;
+                $day = $truckDates[$dateKey];
+
+                foreach (['MY', 'SG'] as $loc) {
+                    $status = $day[$loc]['status'] ?? 'empty';
+                    if (in_array($status, ['available', 'occupied'])) {
+                        if ($loc === 'MY') {
+                            $myOrigin += $day[$loc]['total_capacity'] ?? 0;
+                            $myBalance += $day[$loc]['used_capacity'] ?? 0;
+                        } else {
+                            $sgOrigin += $day[$loc]['total_capacity'] ?? 0;
+                            $sgBalance += $day[$loc]['used_capacity'] ?? 0;
+                        }
+                    }
+                }
+            }
+
+            $entry['MY'] = ['origin' => $myOrigin, 'balance' => $myBalance];
+            $entry['SG'] = ['origin' => $sgOrigin, 'balance' => $sgBalance];
+            return $entry;
+        });
+
         $summary = $this->calculateUtilization($dates);
         $drivers = Driver::orderBy('name')->get();
 

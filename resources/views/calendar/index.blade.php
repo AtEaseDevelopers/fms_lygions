@@ -132,12 +132,12 @@
                         @foreach ($dates as $date)
                             @php
                                 // --- Compute utilization rate for MY and SG ---
-                                $myUsed = $date['my_balance'] ?? 0;
-                                $sgUsed = $date['sg_balance'] ?? 0;
-                                $totalCapacity = $date['origin'] ?? 0;
+                                $myUsed = $date['MY']['balance'] ?? 0;
+                                $sgUsed = $date['SG']['balance'] ?? 0;
+                                $totalCapacity = ($date['MY']['origin'] ?? 0) + ($date['SG']['origin'] ?? 0);
 
-                                $myRate = $totalCapacity > 0 ? ($myUsed / $totalCapacity) * 100 : 0;
-                                $sgRate = $totalCapacity > 0 ? ($sgUsed / $totalCapacity) * 100 : 0;
+                                $myRate = ($date['MY']['origin'] ?? 0) > 0 ? ($myUsed / ($date['MY']['origin'] ?? 0)) * 100 : 0;
+                                $sgRate = ($date['SG']['origin'] ?? 0) > 0 ? ($sgUsed / ($date['SG']['origin'] ?? 0)) * 100 : 0;
 
                                 // --- Determine colors ---
                                 $myColor =
