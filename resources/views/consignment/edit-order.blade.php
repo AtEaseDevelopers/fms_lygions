@@ -24,7 +24,7 @@
     $truckGroups = Truck::select('chassis_type')->distinct()->pluck('chassis_type')->filter()->values()->toArray();
     $trucks = Truck::select('number', 'chassis_type', 'size')->get();
     $subcons = Subcon::select('truck_no', 'chassis_type', 'size')->get();
-    $consignors = Customer::where('type', 'Consignor')
+    $consignors = Customer::ofType('Consignor')
         ->pluck('name')
         ->merge(DraftCustomer::where('type', 'Consignor')->where('migrated', false)->pluck('name'))
         ->unique()
@@ -32,7 +32,7 @@
         ->values()
         ->toArray();
 
-    $consignees = Customer::where('type', 'Consignee')
+    $consignees = Customer::ofType('Consignee')
         ->pluck('name')
         ->merge(DraftCustomer::where('type', 'Consignee')->where('migrated', false)->pluck('name'))
         ->unique()

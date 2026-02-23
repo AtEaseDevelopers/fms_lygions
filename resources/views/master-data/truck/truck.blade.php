@@ -46,11 +46,6 @@
 
                         <!-- Buttons -->
                         <div class="d-flex gap-2">
-                            <button id="truck-sync-btn" class="btn btn-outline-success"
-                                style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
-                                <i class="nc-icon nc-refresh-69" style="font-size: 20px; margin-right: 5px;"></i>
-                                Sync
-                            </button>
                             <button class="btn btn-outline-primary"
                                 style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
                                 <i class="bi bi-file-excel-fill" style="font-size: 20px; margin-right: 5px;"></i> Export
@@ -364,73 +359,6 @@
 
 @endsection
 
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-
-        const btn = document.getElementById('truck-sync-btn');
-
-        btn.addEventListener('click', function() {
-            const originalHtml = btn.innerHTML;
-
-            // Disable button & show syncing
-            btn.disabled = true;
-            btn.innerHTML =
-                `<i class="nc-icon nc-refresh-69" style="font-size: 20px; margin-right: 5px;"></i> Syncing...`;
-
-            axios.post('{{ route('truck.sync') }}', {}, {
-                    headers: {
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    }
-                })
-                .then(res => {
-                    let swalData = res.data.swal || {
-                        icon: 'success',
-                        title: 'Done',
-                        text: 'Trucks synced successfully.'
-                    };
-                    Swal.fire({
-                        icon: swalData.icon,
-                        title: swalData.title,
-                        text: swalData.text
-                    }).then(() => {
-                        location.reload(); // optionally reload to see updated table
-                    });
-                })
-                .catch(err => {
-                    let swalData = err.response?.data?.swal || {
-                        icon: 'error',
-                        title: 'Error',
-                        text: 'Sync failed'
-                    };
-                    Swal.fire({
-                        icon: swalData.icon,
-                        title: swalData.title,
-                        text: swalData.text
-                    });
-                })
-                .finally(() => {
-                    // Restore button
-                    btn.disabled = false;
-                    btn.innerHTML = originalHtml;
-                });
-        });
-        const tableResponsive = document.querySelector(".table-responsive");
-        const topScrollbar = document.querySelector(".table-scrollbar-top");
-        const topInner = topScrollbar.querySelector(".table-scrollbar-inner");
-
-        // Match widths
-        topInner.style.width = tableResponsive.scrollWidth + "px";
-
-        // Sync scrolling
-        topScrollbar.addEventListener("scroll", () => {
-            tableResponsive.scrollLeft = topScrollbar.scrollLeft;
-        });
-
-        tableResponsive.addEventListener("scroll", () => {
-            topScrollbar.scrollLeft = tableResponsive.scrollLeft;
-        });
-    });
-</script>
 <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>

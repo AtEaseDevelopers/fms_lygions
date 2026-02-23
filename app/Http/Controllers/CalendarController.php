@@ -80,12 +80,13 @@ class CalendarController extends Controller
         });
 
         $summary = $this->calculateUtilization($dates);
-        $drivers = Driver::orderBy('name')->get();
+        $drivers = Driver::where('resigned', 0)->orderBy('name')->get();
 
         $prevStart = $start->copy()->subDays($days)->format('Y-m-d');
         $nextStart = $start->copy()->addDays($days)->format('Y-m-d');
 
         $truck_select = Truck::select('id', 'number', 'team')
+            ->where('is_outsider', 0)
             ->get()
             ->map(fn($t) => [
                 'id' => $t->id,
@@ -144,7 +145,7 @@ class CalendarController extends Controller
 
     private function calculateCapacities($dates, $start, $days)
     {
-        $truckMap = Truck::all()->keyBy('number');
+        $truckMap = Truck::where('is_outsider', 0)->get()->keyBy('number');
         $startDate = $start->format('Y-m-d');
         $endDate = $start->copy()->addDays($days - 1)->format('Y-m-d');
 
@@ -213,7 +214,7 @@ class CalendarController extends Controller
     }
     private function buildCalendarMatrix($dates, $truckMap, $availabilityMap, $consignmentMap, $unitsMap)
     {
-        $trucks = Truck::all();
+        $trucks = Truck::where('is_outsider', 0)->get();
         $calendarMatrix = [];
 
         $parseToArray = fn($v) => $this->parseToArray($v);
@@ -434,6 +435,7 @@ class CalendarController extends Controller
 
         // Fetch all trucks and subcons
         $truck_select = Truck::select('id', 'number', 'team')
+            ->where('is_outsider', 0)
             ->get()
             ->map(fn($t) => [
                 'id' => $t->id,
@@ -659,9 +661,9 @@ class CalendarController extends Controller
         \Log::info('Validated Data', $validated);
 
         // Find the related availability record
-        $availability = Availability::where('truck_id', function ($q) use ($validated) {
-            $q->select('id')->from('trucks')->where('number', $validated['truck']);
-        })
+        $truckId = Truck::where('number', $validated['truck'])->value('id');
+
+        $availability = Availability::where('truck_id', $truckId)
             ->whereDate('date', $validated['date'])
             ->first();
 
@@ -701,9 +703,9 @@ class CalendarController extends Controller
         ]);
 
         // Find and delete the availability record
-        $deleted = Availability::where('truck_id', function ($q) use ($validated) {
-            $q->select('id')->from('trucks')->where('number', $validated['truck']);
-        })
+        $truckId = Truck::where('number', $validated['truck'])->value('id');
+
+        $deleted = Availability::where('truck_id', $truckId)
             ->whereDate('date', $validated['date'])
             ->delete();
 

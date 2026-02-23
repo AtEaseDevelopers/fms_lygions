@@ -9,16 +9,10 @@ use Illuminate\Support\Collection;
 use App\Models\Customer;
 use App\Models\DraftCustomer;
 use App\Models\CustomerLocation;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+
 class CustomerController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    /**
-     * Display a listing of the resource.
-     */
     public function index(Request $request)
     {
         $perPage = $request->input('per_page', 10);
@@ -27,31 +21,25 @@ class CustomerController extends Controller
 
         $query = Customer::query();
 
-        // Search filter (by name, account number, email, or company)
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                     ->orWhere('account_number', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%")
-                    ->orWhere('company_reg_no_new', 'like', "%{$search}%")
-                    ->orWhere('company_reg_no_old', 'like', "%{$search}%");
+                    ->orWhere('company_registration_number', 'like', "%{$search}%")
+                    ->orWhere('company_registration_number_old', 'like', "%{$search}%");
             });
         }
 
-        // Filter by role (Consignor/Consignee)
         if ($as = $request->input('as')) {
-            $query->where('type', $as);
+            $query->ofType($as);
         }
 
-        // Apply sorting
         $customers = $query->orderBy($sortBy, $sortOrder)->paginate($perPage);
-
-        // Preserve query parameters for pagination links
         $customers->appends($request->all());
 
         return view('master-data.customer.customer', compact('customers'));
     }
-
 
     public function draftIndex(Request $request)
     {
@@ -66,26 +54,19 @@ class CustomerController extends Controller
         return view('master-data.customer.draft-customer', compact('customers'));
     }
 
-
-    /**
-     * Show the form for creating a new resource.
-     */
     public function draftCreate()
     {
-
         return view('master-data.customer.draft-customer-create');
     }
 
     public function syncDraftToCustomer(Request $request)
     {
         try {
-            // validate optional ids array
             $data = $request->validate([
                 'ids' => 'nullable|array',
                 'ids.*' => 'integer|distinct|exists:draft_customers,id',
             ]);
 
-            // If ids provided, only those; otherwise all unmigrated
             if (!empty($data['ids'])) {
                 $drafts = DraftCustomer::with('locations')
                     ->whereIn('id', $data['ids'])
@@ -112,10 +93,8 @@ class CustomerController extends Controller
             DB::beginTransaction();
 
             foreach ($drafts as $draft) {
-                // Build customer payload (copy fields as needed)
                 $customer = Customer::create([
                     'name' => $draft->name,
-                    'type' => $draft->type,
                     'account_number' => $draft->account_number,
                     'phone' => $draft->phone,
                     'email' => $draft->email,
@@ -134,13 +113,12 @@ class CustomerController extends Controller
                     'service_tax_no' => $draft->service_tax_no,
                     'contact_person' => $draft->contact_person,
                     'term' => $draft->term,
-                    'draft_customer_id' => $draft->id
-                    // add any other fields you need
+                    'type' => $draft->type,
+                    'nickname' => $draft->nickname,
+                    'billing_phone' => $draft->billing_phone,
                 ]);
 
-                // Sync locations
                 if ($draft->locations && $draft->locations->isNotEmpty()) {
-                    // optionally delete existing to avoid duplicates if update scenario
                     $customer->locations()->delete();
 
                     foreach ($draft->locations as $loc) {
@@ -156,9 +134,7 @@ class CustomerController extends Controller
                     }
                 }
 
-                // mark draft migrated
                 $draft->update(['migrated' => true]);
-
                 $processed++;
             }
 
@@ -187,10 +163,6 @@ class CustomerController extends Controller
         }
     }
 
-
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -206,18 +178,15 @@ class CustomerController extends Controller
             'locations.*.type' => 'nullable|string|max:255',
             'locations.*.truck_type' => 'nullable|string|max:255',
             'locations.*.truck_size' => 'nullable|string|max:255',
-
         ], [
             'name.required' => 'Please enter the customer name.',
             'account_number.unique' => 'This account number is already taken.',
         ]);
 
-        // Determine selected types
         $types = [];
         if ($request->has('type')) {
-            $types = explode(',', $request->type); // If you send as comma-separated
+            $types = explode(',', $request->type);
         } else {
-            // fallback: check checkboxes
             if ($request->input('consignor_currency') !== null && $request->input('type') !== 'Consignee') {
                 $types[] = 'Consignor';
             }
@@ -226,41 +195,22 @@ class CustomerController extends Controller
             }
         }
 
-        // fallback if type input only has one
         if (empty($types) && $request->input('type')) {
             $types[] = $request->input('type');
         }
 
-        // Loop through selected types and create a record for each
         foreach ($types as $type) {
             $customer = DraftCustomer::create(array_merge(
                 $request->only([
-                    'name',
-                    'nickname',
-                    'account_number',
-                    'phone',
-                    'billing_address',
-                    'email',
-                    'company_reg_no_new',
-                    'company_reg_no_old',
-                    'website',
-                    'billing_phone',
-                    'remark',
-                    'consignor_currency',
-                    'consignee_currency',
-                    'city',
-                    'post_code',
-                    'state',
-                    'country',
-                    'tin',
-                    'service_tax_no',
-                    'contact_person',
-                    'term',
+                    'name', 'nickname', 'account_number', 'phone', 'billing_address',
+                    'email', 'company_reg_no_new', 'company_reg_no_old', 'website',
+                    'billing_phone', 'remark', 'consignor_currency', 'consignee_currency',
+                    'city', 'post_code', 'state', 'country', 'tin', 'service_tax_no',
+                    'contact_person', 'term',
                 ]),
-                ['type' => $type] // overwrite type for each record
+                ['type' => $type]
             ));
 
-            // Save locations if any
             if (!empty($validated['locations'])) {
                 foreach ($validated['locations'] as $location) {
                     if (isset($location['load_type']) && is_array($location['load_type'])) {
@@ -278,223 +228,58 @@ class CustomerController extends Controller
         ]);
     }
 
-
-
-
-    public function syncFromLygion(Request $request)
-    {
-        try {
-            $customerUrl = 'https://lygions.com/api/v1/customer/get-all';
-            $settingsUrl = 'https://lygions.com/api/v1/customer/settings';
-
-            $customerResponse = Http::get($customerUrl);
-            $settingsResponse = Http::get($settingsUrl);
-
-            if ($customerResponse->failed() || $settingsResponse->failed()) {
-                return response()->json([
-                    'swal' => [
-                        'icon' => 'error',
-                        'title' => 'API Error',
-                        'text' => 'Failed to fetch data from Lygion API.'
-                    ]
-                ], 500);
-            }
-
-            $customers = $customerResponse->json()['customers'] ?? [];
-            $settings = $settingsResponse->json();
-
-            $stateMap = collect($settings['states'] ?? [])
-                ->pluck('name', 'id') // [id => name]
-                ->toArray();
-
-            $termMap = $settings['term'] ?? [];
-            $typeMap = [
-                1 => 'Pickup',
-                2 => 'Dropoff'
-            ];
-
-            $total = count($customers);
-            $processed = 0;
-
-            foreach ($customers as $apiCustomer) {
-                if (empty($apiCustomer['id']))
-                    continue;
-
-                $lygionId = 'lygion_' . $apiCustomer['id'];
-
-                // Determine type from labels
-                $type = 'Consignor';
-                if (!empty($apiCustomer['labels'])) {
-                    $labelNumbers = json_decode($apiCustomer['labels'], true);
-                    if (is_array($labelNumbers) && in_array(2, $labelNumbers)) {
-                        $type = 'Consignee';
-                    }
-                }
-
-                // Map term number to term string
-                $termValue = null;
-                if (!empty($apiCustomer['term']) && isset($termMap[$apiCustomer['term']])) {
-                    $termValue = $termMap[$apiCustomer['term']];
-                }
-
-                $customerData = [
-                    'lygion_id' => $lygionId,
-                    'name' => $apiCustomer['name'] ?? null,
-                    'type' => $type,
-                    'account_number' => $apiCustomer['account_number'] ?? null,
-                    'phone' => $apiCustomer['phone'] ?? null,
-                    'email' => $apiCustomer['email'] ?? null,
-                    'billing_address' => $apiCustomer['billing_address'] ?? null,
-                    'company_reg_no_new' => $apiCustomer['company_registration_number'] ?? null,
-                    'company_reg_no_old' => $apiCustomer['company_registration_number_old'] ?? null,
-                    'website' => $apiCustomer['website'] ?? null,
-                    'remark' => $apiCustomer['remark'] ?? null,
-                    'consignor_currency' => $apiCustomer['consignor_default_currency'] ?? null,
-                    'consignee_currency' => $apiCustomer['consignee_default_currency'] ?? null,
-                    'city' => $apiCustomer['cityname'] ?? null,
-                    'post_code' => $apiCustomer['postcode'] ?? null,
-                    'state' => $apiCustomer['state'] ?? null,
-                    'country' => $apiCustomer['country'] ?? null,
-                    'contact_person' => $apiCustomer['contact_person'] ?? null,
-                    'term' => $termValue,
-                    'tin' => $apiCustomer['income_tax'] ?? null,
-                    'service_tax_no' => $apiCustomer['service_tax'] ?? null,
-                ];
-
-                // 🔹 Create or update the customer
-                $customer = Customer::updateOrCreate(
-                    ['lygion_id' => $lygionId],
-                    $customerData
-                );
-
-                // 🔹 Sync locations
-                if (!empty($apiCustomer['locations']) && is_array($apiCustomer['locations'])) {
-                    $customer->locations()->delete(); // avoid duplicates
-
-                    foreach ($apiCustomer['locations'] as $loc) {
-                        $customer->locations()->create([
-                            'state' => $stateMap[$loc['state_id']] ?? null,
-                            'address' => $loc['location'] ?? null,
-                            'pic' => $loc['pic'] ?? null,
-                            'phone' => $loc['phone'] ?? null,
-                            'type' => $typeMap[$loc['type']] ?? 'Unknown',
-                        ]);
-                    }
-                }
-
-                $processed++;
-            }
-
-            return response()->json([
-                'redirect' => route('customer.index'),
-                'swal' => [
-                    'icon' => 'success',
-                    'title' => 'Sync Complete!',
-                    'text' => "Synced $processed / $total customers from Lygion."
-                ]
-            ]);
-
-        } catch (\Throwable $e) {
-            return response()->json([
-                'swal' => [
-                    'icon' => 'error',
-                    'title' => 'Error',
-                    'text' => $e->getMessage()
-                ]
-            ], 500);
-        }
-    }
-
-
-
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit(Customer $customer)
     {
         return view('master-data.customer.edit', compact('customer'));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function draftEdit(DraftCustomer $draftCustomer)
     {
         return view('master-data.customer.draft-customer-edit', compact('draftCustomer'));
     }
 
+    public function update(Request $request, Customer $customer)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'type' => 'required|in:Consignor,Consignee',
+            'phone' => 'nullable|string|max:20',
+            'billing_address' => 'nullable|string',
+            'locations' => 'nullable|array',
+            'locations.*.state' => 'nullable|string|max:255',
+            'locations.*.address' => 'nullable|string',
+            'locations.*.pic' => 'nullable|string|max:255',
+            'locations.*.phone' => 'nullable|string|max:20',
+            'locations.*.type' => 'nullable|string|max:255',
+            'locations.*.load_type' => 'nullable|array',
+            'locations.*.load_type.*' => 'string|max:50',
+        ]);
 
-    /**
-     * Update the specified resource in storage.
-     */
-   public function update(Request $request, Customer $customer)
-{
-    $request->validate([
-        'name' => 'required|string|max:255',
-        'type' => 'required|in:Consignor,Consignee',
-        'phone' => 'nullable|string|max:20',
-        'billing_address' => 'nullable|string',
+        $customer->update($request->only([
+            'name', 'nickname', 'type', 'account_number', 'phone', 'billing_address',
+            'email', 'company_reg_no_new', 'company_reg_no_old', 'website', 'billing_phone',
+            'remark', 'consignor_currency', 'consignee_currency', 'city', 'post_code',
+            'state', 'country', 'tin', 'service_tax_no', 'contact_person', 'term',
+        ]));
 
-        'locations' => 'nullable|array',
-        'locations.*.state' => 'nullable|string|max:255',
-        'locations.*.address' => 'nullable|string',
-        'locations.*.pic' => 'nullable|string|max:255',
-        'locations.*.phone' => 'nullable|string|max:20',
-        'locations.*.type' => 'nullable|string|max:255',
+        $locations = $request->input('locations', []);
+        $customer->locations()->delete();
 
-        // 🔥 load_type validation
-        'locations.*.load_type' => 'nullable|array',
-        'locations.*.load_type.*' => 'string|max:50',
-    ]);
-
-    $customer->update($request->only([
-        'name',
-        'nickname',
-        'type',
-        'account_number',
-        'phone',
-        'billing_address',
-        'email',
-        'company_reg_no_new',
-        'company_reg_no_old',
-        'website',
-        'billing_phone',
-        'remark',
-        'consignor_currency',
-        'consignee_currency',
-        'city',
-        'post_code',
-        'state',
-        'country',
-        'tin',
-        'service_tax_no',
-        'contact_person',
-        'term',
-    ]));
-
-    $locations = $request->input('locations', []);
-
-    $customer->locations()->delete();
-
-    foreach ($locations as $location) {
-        if (!empty(array_filter($location))) {
-
-            // ✅ convert checkbox array → CSV
-            if (isset($location['load_type']) && is_array($location['load_type'])) {
-                $location['load_type'] = implode(',', $location['load_type']);
+        foreach ($locations as $location) {
+            if (!empty(array_filter($location))) {
+                if (isset($location['load_type']) && is_array($location['load_type'])) {
+                    $location['load_type'] = implode(',', $location['load_type']);
+                }
+                $customer->locations()->create($location);
             }
-
-            $customer->locations()->create($location);
         }
+
+        return redirect()->route('customer.index')->with('swal', [
+            'icon' => 'success',
+            'title' => 'Updated!',
+            'text' => 'Customer and locations updated successfully.'
+        ]);
     }
-
-    return redirect()->route('customer.index')->with('swal', [
-        'icon' => 'success',
-        'title' => 'Updated!',
-        'text' => 'Customer and locations updated successfully.'
-    ]);
-}
-
 
     public function draftUpdate(Request $request, DraftCustomer $draftCustomer)
     {
@@ -504,57 +289,31 @@ class CustomerController extends Controller
             'account_number' => 'nullable|string|max:255|unique:draft_customers,account_number,' . $draftCustomer->id,
             'phone' => 'nullable|string|max:20',
             'billing_address' => 'nullable|string',
-
-            // locations
             'locations' => 'nullable|array',
             'locations.*.state' => 'nullable|string|max:255',
             'locations.*.address' => 'nullable|string',
             'locations.*.pic' => 'nullable|string|max:255',
             'locations.*.phone' => 'nullable|string|max:20',
             'locations.*.type' => 'nullable|string|max:255',
-
-            // 🔥 load_type validation
             'locations.*.load_type' => 'nullable|array',
             'locations.*.load_type.*' => 'string|max:50',
         ]);
 
-        // ✅ Update main customer
         $draftCustomer->update($request->only([
-            'name',
-            'nickname',
-            'type',
-            'account_number',
-            'phone',
-            'billing_address',
-            'email',
-            'company_reg_no_new',
-            'company_reg_no_old',
-            'website',
-            'billing_phone',
-            'remark',
-            'consignor_currency',
-            'consignee_currency',
-            'city',
-            'post_code',
-            'state',
-            'country',
-            'tin',
-            'service_tax_no',
-            'contact_person',
-            'term',
+            'name', 'nickname', 'type', 'account_number', 'phone', 'billing_address',
+            'email', 'company_reg_no_new', 'company_reg_no_old', 'website', 'billing_phone',
+            'remark', 'consignor_currency', 'consignee_currency', 'city', 'post_code',
+            'state', 'country', 'tin', 'service_tax_no', 'contact_person', 'term',
         ]));
 
         $locations = $request->input('locations', []);
-
         $draftCustomer->locations()->delete();
 
         foreach ($locations as $location) {
             if (!empty(array_filter($location))) {
-
                 if (isset($location['load_type']) && is_array($location['load_type'])) {
                     $location['load_type'] = implode(',', $location['load_type']);
                 }
-
                 $draftCustomer->locations()->create($location);
             }
         }
@@ -566,10 +325,6 @@ class CustomerController extends Controller
         ]);
     }
 
-
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(Customer $customer)
     {
         $customer->delete();

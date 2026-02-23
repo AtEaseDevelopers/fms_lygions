@@ -78,7 +78,7 @@ class ConsignmentController extends Controller
 
         // ... rest of your existing code for trucks calculation ...
 
-        $trucks_no = Truck::select('id', 'number', 'group', 'tonnage', 'floor_space')->get();
+        $trucks_no = Truck::select('id', 'number', 'group', 'tonnage', 'floor_space')->where('is_outsider', 0)->get();
         $trucks_grp = $trucks_no->pluck('group')->unique()->values();
         $unitSpaces = Unit::pluck('space', 'unit')->toArray();
 
@@ -171,7 +171,7 @@ class ConsignmentController extends Controller
         $consignments = $query->paginate($perPage);
 
         // Trucks info, similar to index()
-        $trucks_no = Truck::select('id', 'number', 'group', 'tonnage', 'floor_space')->get();
+        $trucks_no = Truck::select('id', 'number', 'group', 'tonnage', 'floor_space')->where('is_outsider', 0)->get();
         $trucks_grp = $trucks_no->pluck('group')->unique()->values();
         $unitSpaces = Unit::pluck('space', 'unit')->toArray();
 

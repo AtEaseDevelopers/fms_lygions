@@ -56,10 +56,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/draft-customer/edit/{draftCustomer}', [CustomerController::class, 'draftEdit'])->name('draft-customer.edit');
     Route::put('/draft-customer/update/{draftCustomer}', [CustomerController::class, 'draftUpdate'])->name('draft-customer.update');
     Route::delete('/draft-customer/destroy/{draftCustomer}', [CustomerController::class, 'draftDestroy'])->name('draft-customer.destroy');
-    Route::post('/draft-customer/sync-lygion', [CustomerController::class, 'syncFromLygion'])->name('customers.sync');
     Route::post('/subcon/sync', [SubconController::class, 'syncFromLygions'])->name('subcon.sync');
-    Route::post('/truck/sync', [TruckController::class, 'syncFromLygions'])->name('truck.sync');
-    Route::post('/driver/sync', [DriverController::class, 'syncFromLygions'])->name('driver.sync');
     Route::post('/draft-customer/sync', [CustomerController::class, 'syncDraftToCustomer'])->name('draft-customer.sync');
     Route::get('/customers/{name}/locations', [ConsignmentController::class, 'getCustomerLocations'])->name('customers.locations');
 });

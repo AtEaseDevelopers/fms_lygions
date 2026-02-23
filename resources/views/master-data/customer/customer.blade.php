@@ -70,11 +70,6 @@
 
                         <!-- Buttons -->
                         <div class="d-flex gap-2">
-                            <button id="sync-btn" class="btn btn-outline-success"
-                                style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
-                                <i class="nc-icon nc-refresh-69" style="font-size: 20px; margin-right: 5px;"></i>
-                                Sync
-                            </button>
                             <button class="btn
                                 btn-outline-primary"
                                 style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
@@ -194,52 +189,6 @@
 <script>
     document.addEventListener("DOMContentLoaded", function() {
 
-        document.getElementById('sync-btn').addEventListener('click', function() {
-            const btn = this;
-            const originalHtml = btn.innerHTML;
-
-            // Disable button and change text
-            btn.disabled = true;
-            btn.innerHTML =
-                `<i class="nc-icon nc-refresh-69" style="font-size: 20px; margin-right: 5px;"></i> Syncing...`;
-
-            axios.post('{{ route('customers.sync') }}', {}, {
-                    headers: {
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    }
-                })
-                .then(res => {
-                    let swalData = res.data.swal || {
-                        icon: 'success',
-                        title: 'Done',
-                        text: 'Customers synced successfully.'
-                    };
-
-                    Swal.fire({
-                        icon: swalData.icon,
-                        title: swalData.title,
-                        text: swalData.text
-                    });
-                })
-                .catch(err => {
-                    let swalData = err.response?.data?.swal || {
-                        icon: 'error',
-                        title: 'Error',
-                        text: 'Sync failed'
-                    };
-
-                    Swal.fire({
-                        icon: swalData.icon,
-                        title: swalData.title,
-                        text: swalData.text
-                    });
-                })
-                .finally(() => {
-                    // Re-enable button and restore original text
-                    btn.disabled = false;
-                    btn.innerHTML = originalHtml;
-                });
-        });
         const topScroll = document.getElementById("tableScrollTop");
         const bottomScroll = document.getElementById("tableScrollBottom");
 
