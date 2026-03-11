@@ -135,6 +135,21 @@
                                     <i class="bi bi-plus-circle me-1" style="font-size: 20px;"></i>
                                     Add Row
                                 </button>
+                                <button type="button" class="btn btn-warning" id="editAllBtn"
+                                    style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
+                                    <i class="bi bi-pencil me-1" style="font-size: 20px;"></i>
+                                    Edit All
+                                </button>
+                                <button type="button" class="btn btn-danger d-none" id="cancelAllBtn"
+                                    style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
+                                    <i class="bi bi-x-circle me-1" style="font-size: 20px;"></i>
+                                    Cancel All
+                                </button>
+                                <button type="button" class="btn btn-success d-none" id="saveAllBtn"
+                                    style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
+                                    <i class="bi bi-save me-1" style="font-size: 20px;"></i>
+                                    Save All
+                                </button>
                                 <button type="button" class="btn btn-outline-secondary" id="toggleTruckDetails"
                                     style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
                                     <i class="bi bi-layout-sidebar-reverse me-1" style="font-size: 20px;"></i>
@@ -185,7 +200,9 @@
                             style="font-size: 0.75rem; border-collapse: collapse;">
                             <thead class="">
                                 <tr>
-                                    <th class="sticky-col"></th>
+                                    <th class="sticky-col">
+                                        <input type="checkbox" id="selectAllCheckbox">
+                                    </th>
                                     <th class="sticky-col">No</th>
                                     <th class="sticky-col">
                                         <a class="text-dark text-decoration-none"
@@ -222,17 +239,6 @@
                                     </th>
                                     <th class="sticky-col">
                                         <a class="text-dark text-decoration-none"
-                                            href="{{ route('consignment-order.index', array_merge(request()->query(), ['sort_by' => 'pick_point', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'pick_point' ? 'desc' : 'asc'])) }}">
-                                            <span class="d-inline-block" style="white-space: normal;">
-                                                Pick Point </span>
-                                            @if (request('sort_by') == 'pick_point')
-                                                <i
-                                                    class="bi bi-caret-{{ request('sort_order') == 'asc' ? 'up' : 'down' }}-fill"></i>
-                                            @endif
-                                        </a>
-                                    </th>
-                                    <th class="sticky-col">
-                                        <a class="text-dark text-decoration-none"
                                             href="{{ route('consignment-order.index', array_merge(request()->query(), ['sort_by' => 'consignee', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'consignee' ? 'desc' : 'asc'])) }}">
                                             Consignee
                                             @if (request('sort_by') == 'consignee')
@@ -241,29 +247,6 @@
                                             @endif
                                         </a>
                                     </th>
-                                    <th class="sticky-col">
-                                        <a class="text-dark text-decoration-none"
-                                            href="{{ route('consignment-order.index', array_merge(request()->query(), ['sort_by' => 'drop_point', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'drop_point' ? 'desc' : 'asc'])) }}">
-                                            <span class="d-inline-block" style="white-space: normal;">
-                                                Drop Point </span>
-                                            @if (request('sort_by') == 'drop_point')
-                                                <i
-                                                    class="bi bi-caret-{{ request('sort_order') == 'asc' ? 'up' : 'down' }}-fill"></i>
-                                            @endif
-                                        </a>
-                                    </th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">
-                                            Pick Address</span></th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">
-                                            Drop Address</span></th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">
-                                            Pick Truck Size</span></th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">
-                                            Drop Truck Size </span></th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">
-                                            Pick Truck Type </span></th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">
-                                            Drop Truck Type </span></th>
                                     <th><span class="d-inline-block" style="white-space: normal;">
                                             Pick Up Time </span></th>
                                     <th><span class="d-inline-block" style="white-space: normal;">
@@ -388,7 +371,6 @@
                                         </td>
 
 
-                                        <td class="sticky-col">{{ $order['pick_point'] ?? '-' }}</td>
                                         <td class="sticky-col">
                                             @php
                                                 // Get consignee display name
@@ -404,15 +386,6 @@
                                             @endphp
                                             {!! nl2br(e(wordwrap($consigneeDisplay, 20, "\n", true))) !!}
                                         </td>
-
-
-                                        <td class="sticky-col">{{ $order['drop_point'] ?? '-' }}</td>
-                                        <td>{{ $order['pick_address'] ?? '-' }}</td>
-                                        <td>{{ $order['drop_address'] ?? '-' }}</td>
-                                        <td>{{ $order['pick_truck_size'] ?? '-' }}</td>
-                                        <td>{{ $order['drop_truck_size'] ?? '-' }}</td>
-                                        <td>{{ $order['pick_truck_type'] ?? '-' }}</td>
-                                        <td>{{ $order['drop_truck_type'] ?? '-' }}</td>
                                         <td>{{ $order['pick_time'] ? \Carbon\Carbon::parse($order['pick_time'])->format('H:i') : '-' }}
                                         </td>
                                         <td>
@@ -492,6 +465,32 @@
                                         <td>{{ $order['express_mode'] ? 'Yes' : '-' }}</td>
                                         <td>
                                             <div class="d-flex align-items-center justify-content-center gap-2">
+                                                <!-- Pick/Drop Details Dropdown -->
+                                                <div class="dropdown">
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm detail-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="View Pick/Drop Details">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    <div class="dropdown-menu p-3" style="min-width: 480px; max-width: 560px; font-size: 0.85rem; white-space: normal;">
+                                                        <div style="display: flex; gap: 1rem;">
+                                                            <!-- Left column: Pick Details -->
+                                                            <div style="flex: 1; min-width: 0;">
+                                                                <h6 class="dropdown-header px-0 pt-0">Pick Details</h6>
+                                                                <div class="mb-1" style="word-wrap: break-word;"><strong>Point:</strong> {{ $order['pick_point'] ?? '-' }}</div>
+                                                                <div class="mb-1" style="word-wrap: break-word;"><strong>Address:</strong> {{ $order['pick_address'] ?? '-' }}</div>
+                                                                <div class="mb-1" style="word-wrap: break-word;"><strong>Truck Size:</strong> {{ $order['pick_truck_size'] ?? '-' }}</div>
+                                                                <div style="word-wrap: break-word;"><strong>Truck Type:</strong> {{ $order['pick_truck_type'] ?? '-' }}</div>
+                                                            </div>
+                                                            <!-- Right column: Drop Details -->
+                                                            <div style="flex: 1; min-width: 0;">
+                                                                <h6 class="dropdown-header px-0 pt-0">Drop Details</h6>
+                                                                <div class="mb-1" style="word-wrap: break-word;"><strong>Point:</strong> {{ $order['drop_point'] ?? '-' }}</div>
+                                                                <div class="mb-1" style="word-wrap: break-word;"><strong>Address:</strong> {{ $order['drop_address'] ?? '-' }}</div>
+                                                                <div class="mb-1" style="word-wrap: break-word;"><strong>Truck Size:</strong> {{ $order['drop_truck_size'] ?? '-' }}</div>
+                                                                <div style="word-wrap: break-word;"><strong>Truck Type:</strong> {{ $order['drop_truck_type'] ?? '-' }}</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                                 <!-- Edit Button -->
                                                 <button type="button" class="btn btn-info edit-inline-btn">
                                                     <i class="bi bi-pencil-square"></i>
@@ -670,42 +669,85 @@
             return new bootstrap.Tooltip(tooltipTriggerEl);
         });
 
+        // Fix detail dropdowns clipped by overflow container — move menu to body on open
+        document.addEventListener('shown.bs.dropdown', function(e) {
+            if (!e.target.classList.contains('detail-dropdown-toggle')) return;
+            var menu = e.target.nextElementSibling;
+            if (!menu) return;
+            var rect = e.target.getBoundingClientRect();
+            menu.style.position = 'fixed';
+            menu.style.top = (rect.bottom + 2) + 'px';
+            menu.style.left = (rect.right - menu.offsetWidth) + 'px';
+            menu.style.zIndex = '1080';
+            document.body.appendChild(menu);
+            menu._originalParent = e.target.parentElement;
+        });
+        document.addEventListener('hidden.bs.dropdown', function(e) {
+            if (!e.target.classList.contains('detail-dropdown-toggle')) return;
+            var menu = e.target.nextElementSibling || document.querySelector('.dropdown-menu[style*="position: fixed"]');
+            if (!menu) {
+                // Menu was moved to body, find it there
+                var menus = document.body.querySelectorAll(':scope > .dropdown-menu');
+                menus.forEach(function(m) {
+                    if (m._originalParent) {
+                        m.style.position = '';
+                        m.style.top = '';
+                        m.style.left = '';
+                        m.style.zIndex = '';
+                        m._originalParent.appendChild(m);
+                        delete m._originalParent;
+                    }
+                });
+                return;
+            }
+            if (menu._originalParent) {
+                menu.style.position = '';
+                menu.style.top = '';
+                menu.style.left = '';
+                menu.style.zIndex = '';
+                menu._originalParent.appendChild(menu);
+                delete menu._originalParent;
+            }
+        });
+
         // Toggle Truck Details Sidebar
         const toggleBtn = document.getElementById('toggleTruckDetails');
         const tableSection = document.getElementById('tableSection');
         const truckDetailsSection = document.getElementById('truckDetailsSection');
 
-        // Load saved preference from localStorage
-        const sidebarVisible = localStorage.getItem('truckDetailsSidebarVisible') === 'true';
-        if (sidebarVisible) {
-            truckDetailsSection.classList.remove('d-none');
-            tableSection.classList.remove('col-md-12');
-            tableSection.classList.add('col-md-10');
-            toggleBtn.classList.remove('btn-outline-secondary');
-            toggleBtn.classList.add('btn-secondary');
-        }
-
-        toggleBtn.addEventListener('click', function() {
-            const isHidden = truckDetailsSection.classList.contains('d-none');
-
-            if (isHidden) {
-                // Show sidebar
+        if (toggleBtn && tableSection && truckDetailsSection) {
+            // Load saved preference from localStorage
+            const sidebarVisible = localStorage.getItem('truckDetailsSidebarVisible') === 'true';
+            if (sidebarVisible) {
                 truckDetailsSection.classList.remove('d-none');
                 tableSection.classList.remove('col-md-12');
                 tableSection.classList.add('col-md-10');
                 toggleBtn.classList.remove('btn-outline-secondary');
                 toggleBtn.classList.add('btn-secondary');
-                localStorage.setItem('truckDetailsSidebarVisible', 'true');
-            } else {
-                // Hide sidebar
-                truckDetailsSection.classList.add('d-none');
-                tableSection.classList.remove('col-md-10');
-                tableSection.classList.add('col-md-12');
-                toggleBtn.classList.remove('btn-secondary');
-                toggleBtn.classList.add('btn-outline-secondary');
-                localStorage.setItem('truckDetailsSidebarVisible', 'false');
             }
-        });
+
+            toggleBtn.addEventListener('click', function() {
+                const isHidden = truckDetailsSection.classList.contains('d-none');
+
+                if (isHidden) {
+                    // Show sidebar
+                    truckDetailsSection.classList.remove('d-none');
+                    tableSection.classList.remove('col-md-12');
+                    tableSection.classList.add('col-md-10');
+                    toggleBtn.classList.remove('btn-outline-secondary');
+                    toggleBtn.classList.add('btn-secondary');
+                    localStorage.setItem('truckDetailsSidebarVisible', 'true');
+                } else {
+                    // Hide sidebar
+                    truckDetailsSection.classList.add('d-none');
+                    tableSection.classList.remove('col-md-10');
+                    tableSection.classList.add('col-md-12');
+                    toggleBtn.classList.remove('btn-secondary');
+                    toggleBtn.classList.add('btn-outline-secondary');
+                    localStorage.setItem('truckDetailsSidebarVisible', 'false');
+                }
+            });
+        }
 
         const checkboxes = document.querySelectorAll('.order-row input[type="checkbox"]');
         const saveBtn = document.getElementById('bulkSaveBtn');
@@ -715,7 +757,20 @@
             saveBtn.classList.toggle('d-none', !anyChecked);
         }
 
-        checkboxes.forEach(cb => cb.addEventListener('change', toggleSaveButton));
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+
+        selectAllCheckbox.addEventListener('change', function() {
+            checkboxes.forEach(cb => cb.checked = this.checked);
+            toggleSaveButton();
+        });
+
+        checkboxes.forEach(cb => cb.addEventListener('change', function() {
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
+            selectAllCheckbox.checked = allChecked;
+            selectAllCheckbox.indeterminate = anyChecked && !allChecked;
+            toggleSaveButton();
+        }));
 
         saveBtn.addEventListener('click', function() {
             // Collect selected rows
@@ -1085,6 +1140,200 @@
                 .replace(/`/g, '&#96;').replace(/\$/g, '&#36;');
         }
 
+        let editAllMode = false;
+        const editAllBtn = document.getElementById('editAllBtn');
+        const cancelAllBtn = document.getElementById('cancelAllBtn');
+        const saveAllBtn = document.getElementById('saveAllBtn');
+
+        function convertRowToEdit(row) {
+            const id = row.dataset.id;
+
+            const loadDate = row.dataset.loadDate || '';
+            const consignor = row.dataset.consignor || '';
+            const pickPoint = row.dataset.pickPoint || '';
+            const consignee = row.dataset.consignee || '';
+            const dropPoint = row.dataset.dropPoint || '';
+            const pickAddress = row.dataset.pickAddress || '';
+            const dropAddress = row.dataset.dropAddress || '';
+            const pickTruckSize = row.dataset.pickTruckSize || '';
+            const dropTruckSize = row.dataset.dropTruckSize || '';
+            const pickTruckType = row.dataset.pickTruckType || '';
+            const dropTruckType = row.dataset.dropTruckType || '';
+            const pickTime = row.dataset.pickTime || '';
+            const prePick = row.dataset.prePick || '';
+            const truckNumber = row.dataset.truckNumber || '';
+            const remarks = row.dataset.remarks || '';
+            const billingRemark = row.dataset.billingRemark || '';
+            const status = row.dataset.status || '';
+            const expressMode = row.dataset.expressMode || '0';
+
+            let quantities = [];
+            let unitValues = [];
+            try { quantities = JSON.parse(row.dataset.quantity || '[]'); } catch(err) { quantities = []; }
+            try { unitValues = JSON.parse(row.dataset.unit || '[]'); } catch(err) { unitValues = []; }
+
+            const originalHTML = row.innerHTML;
+            const originalClassName = row.className;
+            const originalDataset = { ...row.dataset };
+
+            let unitsOptions = '<option value="">-</option>';
+            if (UNITS && Array.isArray(UNITS)) {
+                unitsOptions += UNITS.map(u => {
+                    const unitUpper = (u.unit || '').toUpperCase();
+                    const unitDesc = u.desc || '';
+                    const sel = (unitValues[0] || '') === u.unit ? ' selected' : '';
+                    return `<option value="${u.unit}"${sel}>${unitUpper} — ${unitDesc}</option>`;
+                }).join('');
+            }
+
+            let truckGroupsOptions = '<option value="">-</option><option value="all"' + (pickTruckType === 'all' ? ' selected' : '') + '>ALL</option>';
+            if (TRUCK_GROUPS && Array.isArray(TRUCK_GROUPS)) {
+                truckGroupsOptions += TRUCK_GROUPS.map(g => `<option value="${g}"${g === pickTruckType ? ' selected' : ''}>${g}</option>`).join('');
+            }
+
+            let dropTruckGroupsOptions = '<option value="">-</option><option value="all"' + (dropTruckType === 'all' ? ' selected' : '') + '>ALL</option>';
+            if (TRUCK_GROUPS && Array.isArray(TRUCK_GROUPS)) {
+                dropTruckGroupsOptions += TRUCK_GROUPS.map(g => `<option value="${g}"${g === dropTruckType ? ' selected' : ''}>${g}</option>`).join('');
+            }
+
+            let consignorOptions = '';
+            if (CONSIGNORS && Array.isArray(CONSIGNORS)) {
+                consignorOptions = CONSIGNORS.map(c => `<option value="${escapeAttr(c)}"></option>`).join('');
+            }
+
+            let consigneeOptions = '';
+            if (CONSIGNEES && Array.isArray(CONSIGNEES)) {
+                consigneeOptions = CONSIGNEES.map(c => `<option value="${escapeAttr(c)}"></option>`).join('');
+            }
+
+            let truckOptions = '<option value="">-</option>';
+            if (ALL_TRUCKS && Array.isArray(ALL_TRUCKS)) {
+                truckOptions += ALL_TRUCKS.map(t => `<option value="${t.number}"${t.number === truckNumber ? ' selected' : ''}>${t.number}</option>`).join('');
+            }
+            if (ALL_SUBCONS && Array.isArray(ALL_SUBCONS)) {
+                truckOptions += ALL_SUBCONS.map(s => `<option value="${s.truck_no}"${s.truck_no === truckNumber ? ' selected' : ''}>${s.truck_no} (Subcon)</option>`).join('');
+            }
+
+            function sizeOptions(selected) {
+                return `<option value=""${!selected ? ' selected' : ''}>-</option>
+                        <option value="Small"${selected === 'Small' ? ' selected' : ''}>Small</option>
+                        <option value="Any"${selected === 'Any' ? ' selected' : ''}>Any</option>`;
+            }
+
+            row.className = 'inline-edit-row table-warning';
+            row.dataset.editId = id;
+            row._originalHTML = originalHTML;
+            row._originalClassName = originalClassName;
+            row._originalDataset = originalDataset;
+
+            row.innerHTML = `
+                <td class="sticky-col">
+                    <div class="d-flex align-items-center gap-2 justify-content-center">
+                        <button type="button" class="btn btn-sm btn-success save-inline-row">
+                            <i class="bi bi-check-lg"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-danger cancel-inline-row">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </td>
+                <td class="sticky-col">EDIT</td>
+                <td class="sticky-col">
+                    <input type="date" class="form-control form-control-sm" name="load_date" value="${escapeAttr(loadDate)}" required>
+                </td>
+                <td class="sticky-col">
+                    <input name="consignor" list="edit_consignor_list_${id}" class="form-control form-control-sm"
+                           placeholder="Consignor" value="${escapeAttr(consignor)}" required>
+                    <datalist id="edit_consignor_list_${id}">
+                        ${consignorOptions}
+                    </datalist>
+                </td>
+                <td class="sticky-col">
+                    <input type="text" class="form-control form-control-sm" name="pick_point" placeholder="Pick Point" value="${escapeAttr(pickPoint)}" required>
+                </td>
+                <td class="sticky-col">
+                    <input name="consignee" list="edit_consignee_list_${id}" class="form-control form-control-sm"
+                           placeholder="Consignee" value="${escapeAttr(consignee)}" required>
+                    <datalist id="edit_consignee_list_${id}">
+                        ${consigneeOptions}
+                    </datalist>
+                </td>
+                <td class="sticky-col">
+                    <input type="text" class="form-control form-control-sm" name="drop_point" placeholder="Drop Point" value="${escapeAttr(dropPoint)}" required>
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm" name="pick_address" placeholder="Pick Address" value="${escapeAttr(pickAddress)}">
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm" name="drop_address" placeholder="Drop Address" value="${escapeAttr(dropAddress)}">
+                </td>
+                <td>
+                    <select class="form-select form-select-sm" name="pick_truck_size">
+                        ${sizeOptions(pickTruckSize)}
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select form-select-sm" name="drop_truck_size">
+                        ${sizeOptions(dropTruckSize)}
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select form-select-sm" name="pick_truck_type">
+                        ${truckGroupsOptions}
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select form-select-sm" name="drop_truck_type">
+                        ${dropTruckGroupsOptions}
+                    </select>
+                </td>
+                <td>
+                    <input type="time" class="form-control form-control-sm" name="pick_time" value="${escapeAttr(pickTime)}">
+                </td>
+                <td>
+                    <input type="number" class="form-control form-control-sm" name="quantity[]" placeholder="Qty" value="${quantities[0] || ''}">
+                </td>
+                <td>
+                    <select class="form-select form-select-sm" name="unit[]">
+                        ${unitsOptions}
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select form-select-sm" name="pre_pick">
+                        <option value="">-</option>
+                        <option value="SELF"${prePick === 'SELF' ? ' selected' : ''}>SELF</option>
+                        <option value="WVS 5404"${prePick === 'WVS 5404' ? ' selected' : ''}>WVS 5404</option>
+                        <option value="NCR 8825"${prePick === 'NCR 8825' ? ' selected' : ''}>NCR 8825</option>
+                        <option value="BSG 8826"${prePick === 'BSG 8826' ? ' selected' : ''}>BSG 8826</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select form-select-sm" name="truck_number">
+                        ${truckOptions}
+                    </select>
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm" name="remarks" placeholder="Remarks" value="${escapeAttr(remarks)}">
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm" name="billing_remark" placeholder="Billing Remarks" value="${escapeAttr(billingRemark)}">
+                </td>
+                <td>
+                    <select class="form-select form-select-sm" name="status">
+                        <option value="Pending"${status === 'Pending' ? ' selected' : ''}>Pending</option>
+                        <option value="Planning"${status === 'Planning' ? ' selected' : ''}>Planning</option>
+                        <option value="Completed"${status === 'Completed' ? ' selected' : ''}>Completed</option>
+                    </select>
+                </td>
+                <td>
+                    <input type="checkbox" name="express_mode" value="1" class="form-check-input" ${expressMode === '1' ? 'checked' : ''}>
+                </td>
+                <td></td>
+            `;
+
+            return row;
+        }
+
         function recalculateStickyColumns() {
             setTimeout(function() {
                 const table = document.querySelector("table.table");
@@ -1403,7 +1652,16 @@
                         } else {
                             row.remove();
                         }
-                        addInlineRowBtn.disabled = false;
+                        // Check if no more edit rows remain — exit edit-all mode
+                        if (!document.querySelector('.inline-edit-row')) {
+                            addInlineRowBtn.disabled = false;
+                            if (editAllMode) {
+                                editAllMode = false;
+                                editAllBtn.classList.remove('d-none');
+                                cancelAllBtn.classList.add('d-none');
+                                saveAllBtn.classList.add('d-none');
+                            }
+                        }
                         recalculateStickyColumns();
                     }
                 });
@@ -1411,202 +1669,14 @@
 
             // Edit inline button
             if (e.target.closest('.edit-inline-btn')) {
-                // Check if there's already an inline edit row
-                if (document.querySelector('.inline-edit-row')) {
+                // Check if there's already an inline edit row (skip check during edit-all mode)
+                if (!editAllMode && document.querySelector('.inline-edit-row')) {
                     Swal.fire('Warning', 'Please save or cancel the current row first', 'warning');
                     return;
                 }
 
                 const row = e.target.closest('.order-row');
-                const id = row.dataset.id;
-
-                // Read all data attributes
-                const loadDate = row.dataset.loadDate || '';
-                const consignor = row.dataset.consignor || '';
-                const pickPoint = row.dataset.pickPoint || '';
-                const consignee = row.dataset.consignee || '';
-                const dropPoint = row.dataset.dropPoint || '';
-                const pickAddress = row.dataset.pickAddress || '';
-                const dropAddress = row.dataset.dropAddress || '';
-                const pickTruckSize = row.dataset.pickTruckSize || '';
-                const dropTruckSize = row.dataset.dropTruckSize || '';
-                const pickTruckType = row.dataset.pickTruckType || '';
-                const dropTruckType = row.dataset.dropTruckType || '';
-                const pickTime = row.dataset.pickTime || '';
-                const prePick = row.dataset.prePick || '';
-                const truckNumber = row.dataset.truckNumber || '';
-                const remarks = row.dataset.remarks || '';
-                const billingRemark = row.dataset.billingRemark || '';
-                const status = row.dataset.status || '';
-                const expressMode = row.dataset.expressMode || '0';
-
-                let quantities = [];
-                let unitValues = [];
-                try { quantities = JSON.parse(row.dataset.quantity || '[]'); } catch(err) { quantities = []; }
-                try { unitValues = JSON.parse(row.dataset.unit || '[]'); } catch(err) { unitValues = []; }
-
-                // Store original row for cancel/restore
-                const originalHTML = row.innerHTML;
-                const originalClassName = row.className;
-                const originalDataset = { ...row.dataset };
-
-                // Build options (reuse from add row)
-                let unitsOptions = '<option value="">-</option>';
-                if (UNITS && Array.isArray(UNITS)) {
-                    unitsOptions += UNITS.map(u => {
-                        const unitUpper = (u.unit || '').toUpperCase();
-                        const unitDesc = u.desc || '';
-                        const sel = (unitValues[0] || '') === u.unit ? ' selected' : '';
-                        return `<option value="${u.unit}"${sel}>${unitUpper} — ${unitDesc}</option>`;
-                    }).join('');
-                }
-
-                let truckGroupsOptions = '<option value="">-</option><option value="all"' + (pickTruckType === 'all' ? ' selected' : '') + '>ALL</option>';
-                if (TRUCK_GROUPS && Array.isArray(TRUCK_GROUPS)) {
-                    truckGroupsOptions += TRUCK_GROUPS.map(g => `<option value="${g}"${g === pickTruckType ? ' selected' : ''}>${g}</option>`).join('');
-                }
-
-                let dropTruckGroupsOptions = '<option value="">-</option><option value="all"' + (dropTruckType === 'all' ? ' selected' : '') + '>ALL</option>';
-                if (TRUCK_GROUPS && Array.isArray(TRUCK_GROUPS)) {
-                    dropTruckGroupsOptions += TRUCK_GROUPS.map(g => `<option value="${g}"${g === dropTruckType ? ' selected' : ''}>${g}</option>`).join('');
-                }
-
-                let consignorOptions = '';
-                if (CONSIGNORS && Array.isArray(CONSIGNORS)) {
-                    consignorOptions = CONSIGNORS.map(c => `<option value="${escapeAttr(c)}"></option>`).join('');
-                }
-
-                let consigneeOptions = '';
-                if (CONSIGNEES && Array.isArray(CONSIGNEES)) {
-                    consigneeOptions = CONSIGNEES.map(c => `<option value="${escapeAttr(c)}"></option>`).join('');
-                }
-
-                let truckOptions = '<option value="">-</option>';
-                if (ALL_TRUCKS && Array.isArray(ALL_TRUCKS)) {
-                    truckOptions += ALL_TRUCKS.map(t => `<option value="${t.number}"${t.number === truckNumber ? ' selected' : ''}>${t.number}</option>`).join('');
-                }
-                if (ALL_SUBCONS && Array.isArray(ALL_SUBCONS)) {
-                    truckOptions += ALL_SUBCONS.map(s => `<option value="${s.truck_no}"${s.truck_no === truckNumber ? ' selected' : ''}>${s.truck_no} (Subcon)</option>`).join('');
-                }
-
-                // Build size options helper
-                function sizeOptions(selected) {
-                    return `<option value=""${!selected ? ' selected' : ''}>-</option>
-                            <option value="Small"${selected === 'Small' ? ' selected' : ''}>Small</option>
-                            <option value="Any"${selected === 'Any' ? ' selected' : ''}>Any</option>`;
-                }
-
-                // Replace row with editable inputs
-                row.className = 'inline-edit-row table-warning';
-                row.dataset.editId = id;
-                row._originalHTML = originalHTML;
-                row._originalClassName = originalClassName;
-                row._originalDataset = originalDataset;
-
-                row.innerHTML = `
-                    <td class="sticky-col">
-                        <div class="d-flex align-items-center gap-2 justify-content-center">
-                            <button type="button" class="btn btn-sm btn-success save-inline-row">
-                                <i class="bi bi-check-lg"></i>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-danger cancel-inline-row">
-                                <i class="bi bi-x-lg"></i>
-                            </button>
-                        </div>
-                    </td>
-                    <td class="sticky-col">EDIT</td>
-                    <td class="sticky-col">
-                        <input type="date" class="form-control form-control-sm" name="load_date" value="${escapeAttr(loadDate)}" required>
-                    </td>
-                    <td class="sticky-col">
-                        <input name="consignor" list="edit_consignor_list" class="form-control form-control-sm"
-                               placeholder="Consignor" value="${escapeAttr(consignor)}" required>
-                        <datalist id="edit_consignor_list">
-                            ${consignorOptions}
-                        </datalist>
-                    </td>
-                    <td class="sticky-col">
-                        <input type="text" class="form-control form-control-sm" name="pick_point" placeholder="Pick Point" value="${escapeAttr(pickPoint)}" required>
-                    </td>
-                    <td class="sticky-col">
-                        <input name="consignee" list="edit_consignee_list" class="form-control form-control-sm"
-                               placeholder="Consignee" value="${escapeAttr(consignee)}" required>
-                        <datalist id="edit_consignee_list">
-                            ${consigneeOptions}
-                        </datalist>
-                    </td>
-                    <td class="sticky-col">
-                        <input type="text" class="form-control form-control-sm" name="drop_point" placeholder="Drop Point" value="${escapeAttr(dropPoint)}" required>
-                    </td>
-                    <td>
-                        <input type="text" class="form-control form-control-sm" name="pick_address" placeholder="Pick Address" value="${escapeAttr(pickAddress)}">
-                    </td>
-                    <td>
-                        <input type="text" class="form-control form-control-sm" name="drop_address" placeholder="Drop Address" value="${escapeAttr(dropAddress)}">
-                    </td>
-                    <td>
-                        <select class="form-select form-select-sm" name="pick_truck_size">
-                            ${sizeOptions(pickTruckSize)}
-                        </select>
-                    </td>
-                    <td>
-                        <select class="form-select form-select-sm" name="drop_truck_size">
-                            ${sizeOptions(dropTruckSize)}
-                        </select>
-                    </td>
-                    <td>
-                        <select class="form-select form-select-sm" name="pick_truck_type">
-                            ${truckGroupsOptions}
-                        </select>
-                    </td>
-                    <td>
-                        <select class="form-select form-select-sm" name="drop_truck_type">
-                            ${dropTruckGroupsOptions}
-                        </select>
-                    </td>
-                    <td>
-                        <input type="time" class="form-control form-control-sm" name="pick_time" value="${escapeAttr(pickTime)}">
-                    </td>
-                    <td>
-                        <input type="number" class="form-control form-control-sm" name="quantity[]" placeholder="Qty" value="${quantities[0] || ''}">
-                    </td>
-                    <td>
-                        <select class="form-select form-select-sm" name="unit[]">
-                            ${unitsOptions}
-                        </select>
-                    </td>
-                    <td>
-                        <select class="form-select form-select-sm" name="pre_pick">
-                            <option value="">-</option>
-                            <option value="SELF"${prePick === 'SELF' ? ' selected' : ''}>SELF</option>
-                            <option value="WVS 5404"${prePick === 'WVS 5404' ? ' selected' : ''}>WVS 5404</option>
-                            <option value="NCR 8825"${prePick === 'NCR 8825' ? ' selected' : ''}>NCR 8825</option>
-                            <option value="BSG 8826"${prePick === 'BSG 8826' ? ' selected' : ''}>BSG 8826</option>
-                        </select>
-                    </td>
-                    <td>
-                        <select class="form-select form-select-sm" name="truck_number">
-                            ${truckOptions}
-                        </select>
-                    </td>
-                    <td>
-                        <input type="text" class="form-control form-control-sm" name="remarks" placeholder="Remarks" value="${escapeAttr(remarks)}">
-                    </td>
-                    <td>
-                        <input type="text" class="form-control form-control-sm" name="billing_remark" placeholder="Billing Remarks" value="${escapeAttr(billingRemark)}">
-                    </td>
-                    <td>
-                        <select class="form-select form-select-sm" name="status">
-                            <option value="Pending"${status === 'Pending' ? ' selected' : ''}>Pending</option>
-                            <option value="Planning"${status === 'Planning' ? ' selected' : ''}>Planning</option>
-                            <option value="Completed"${status === 'Completed' ? ' selected' : ''}>Completed</option>
-                        </select>
-                    </td>
-                    <td>
-                        <input type="checkbox" name="express_mode" value="1" class="form-check-input" ${expressMode === '1' ? 'checked' : ''}>
-                    </td>
-                    <td></td>
-                `;
+                convertRowToEdit(row);
 
                 // Disable add button while editing
                 addInlineRowBtn.disabled = true;
@@ -1616,6 +1686,140 @@
             }
         });
         console.log('Button handlers registered');
+
+        // Edit All button handler
+        editAllBtn.addEventListener('click', function() {
+            if (document.querySelector('.inline-edit-row')) {
+                Swal.fire('Warning', 'Please save or cancel the current row first', 'warning');
+                return;
+            }
+
+            const rows = tableBody.querySelectorAll('.order-row');
+            if (rows.length === 0) {
+                Swal.fire('Warning', 'No rows to edit', 'warning');
+                return;
+            }
+
+            editAllMode = true;
+            rows.forEach(row => convertRowToEdit(row));
+
+            editAllBtn.classList.add('d-none');
+            addInlineRowBtn.disabled = true;
+            cancelAllBtn.classList.remove('d-none');
+            saveAllBtn.classList.remove('d-none');
+
+            recalculateStickyColumns();
+        });
+
+        // Cancel All button handler
+        cancelAllBtn.addEventListener('click', function() {
+            Swal.fire({
+                title: 'Discard all changes?',
+                text: 'All edits will be discarded',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, discard all',
+                cancelButtonText: 'No, keep editing'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const editRows = tableBody.querySelectorAll('.inline-edit-row[data-edit-id]');
+                    editRows.forEach(row => {
+                        if (row._originalHTML) {
+                            const restoredRow = document.createElement('tr');
+                            restoredRow.className = row._originalClassName;
+                            restoredRow.innerHTML = row._originalHTML;
+                            for (const key in row._originalDataset) {
+                                restoredRow.dataset[key] = row._originalDataset[key];
+                            }
+                            row.parentNode.replaceChild(restoredRow, row);
+                            populateTruckDropdown(restoredRow);
+                            restoredRow.querySelectorAll('.delete-form').forEach(form => {
+                                form.addEventListener('submit', handleDeleteForm);
+                            });
+                        }
+                    });
+
+                    editAllMode = false;
+                    editAllBtn.classList.remove('d-none');
+                    addInlineRowBtn.disabled = false;
+                    cancelAllBtn.classList.add('d-none');
+                    saveAllBtn.classList.add('d-none');
+
+                    recalculateStickyColumns();
+                }
+            });
+        });
+
+        // Save All button handler
+        saveAllBtn.addEventListener('click', function() {
+            const editRows = tableBody.querySelectorAll('.inline-edit-row[data-edit-id]');
+            if (editRows.length === 0) {
+                Swal.fire('Warning', 'No rows to save', 'warning');
+                return;
+            }
+
+            // Validate all rows first
+            for (const row of editRows) {
+                const loadDate = row.querySelector('[name="load_date"]')?.value;
+                const consignor = row.querySelector('[name="consignor"]')?.value;
+                const consignee = row.querySelector('[name="consignee"]')?.value;
+                const pickPoint = row.querySelector('[name="pick_point"]')?.value;
+                const dropPoint = row.querySelector('[name="drop_point"]')?.value;
+
+                if (!loadDate || !consignor || !consignee || !pickPoint || !dropPoint) {
+                    Swal.fire('Error', 'Please fill in all required fields in every row', 'error');
+                    return;
+                }
+            }
+
+            Swal.fire({
+                title: 'Saving all rows...',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            const promises = Array.from(editRows).map(row => {
+                const editId = row.dataset.editId;
+                const formData = new FormData();
+
+                row.querySelectorAll('input, select').forEach(input => {
+                    if (input.name) {
+                        if (input.type === 'checkbox') {
+                            if (input.checked) {
+                                formData.append(input.name, input.value);
+                            }
+                        } else {
+                            formData.append(input.name, input.value);
+                        }
+                    }
+                });
+
+                return fetch(`/consignment-order/${editId}/update-inline`, {
+                    method: "POST",
+                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                    body: formData
+                }).then(res => res.json()).then(data => ({ editId, data }));
+            });
+
+            Promise.all(promises)
+                .then(results => {
+                    const failed = results.filter(r => !r.data.success);
+                    if (failed.length > 0) {
+                        Swal.fire('Error', `${failed.length} row(s) failed to save`, 'error');
+                    } else {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'All rows updated!',
+                            timer: 2000,
+                            showConfirmButton: false
+                        }).then(() => { location.reload(); });
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    Swal.fire('Error', 'Failed to save rows', 'error');
+                });
+        });
 
         // Helper: populate truck dropdown for a single row
         function populateTruckDropdown(row) {

@@ -321,6 +321,7 @@
         <td>
             <select class="form-control" name="locations[${rowCount}][truck_type]">
                 <option value="" disabled selected>Select Truck Type</option>
+                <option value="any">Any</option>
                 <option value="curtain">Curtain</option>
                 <option value="open">Open</option>
                 <option value="tailgate">Tailgate</option>

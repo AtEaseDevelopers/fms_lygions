@@ -277,6 +277,9 @@
                                             <option value="" {{ empty($location->truck_type) ? 'selected' : '' }}>
                                                 -- Select Truck Type --
                                             </option>
+                                            <option value="any"
+                                                {{ ($location->truck_type ?? '') == 'any' ? 'selected' : '' }}>Any
+                                            </option>
                                             <option value="curtain"
                                                 {{ ($location->truck_type ?? '') == 'curtain' ? 'selected' : '' }}>Curtain
                                             </option>
@@ -391,6 +394,7 @@
              <td>
             <select class="form-control" name="locations[${rowCount}][default_truck_type]">
                 <option value="" disabled selected>Select Truck Type</option>
+                <option value="any">Any</option>
                    <option value="curtain">curtain</option>
                 <option value="open">open</option>
                 <option value="tailgate">tailgate</option>
