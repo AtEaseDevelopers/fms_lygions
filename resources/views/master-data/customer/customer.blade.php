@@ -91,17 +91,6 @@
                                     <th>Name</th>
                                     <th>Nickname</th>
                                     <th>As</th>
-                                    <th>Account Number</th>
-                                    <th>Phone</th>
-                                    <th>Billing Address</th>
-                                    <th>Email</th>
-                                    <th>Company Reg No (New)</th>
-                                    <th>Company Reg No (Old)</th>
-                                    <th>Website</th>
-                                    <th>Billing Phone</th>
-                                    <th>Remark</th>
-                                    <th>Consignor Currency</th>
-                                    <th>Consignee Currency</th>
                                     <th>City</th>
                                     <th>Post Code</th>
                                     <th>State</th>
@@ -110,6 +99,8 @@
                                     <th>Service Tax No</th>
                                     <th>Contact Person</th>
                                     <th>Term</th>
+                                    <th>Pick/Drop Point</th>
+                                    <th>Pick/Drop Truck Type</th>
 
                                     <th class="text-center">Actions</th>
                                 </tr>
@@ -123,17 +114,6 @@
                                         <td>{{ $customer->name }}</td>
                                         <td>{{ $customer->nickname }}</td>
                                         <td>{{ $customer->type }}</td>
-                                        <td>{{ $customer->account_number }}</td>
-                                        <td>{{ $customer->phone }}</td>
-                                        <td>{{ $customer->billing_address }}</td>
-                                        <td>{{ $customer->email }}</td>
-                                        <td>{{ $customer->company_reg_no_new }}</td>
-                                        <td>{{ $customer->company_reg_no_old }}</td>
-                                        <td>{{ $customer->website }}</td>
-                                        <td>{{ $customer->billing_phone }}</td>
-                                        <td>{{ $customer->remark }}</td>
-                                        <td>{{ $customer->consignor_currency }}</td>
-                                        <td>{{ $customer->consignee_currency }}</td>
                                         <td>{{ $customer->city }}</td>
                                         <td>{{ $customer->post_code }}</td>
                                         <td>{{ $customer->state }}</td>
@@ -142,6 +122,8 @@
                                         <td>{{ $customer->service_tax_no }}</td>
                                         <td>{{ $customer->contact_person }}</td>
                                         <td>{{ $customer->term }}</td>
+                                        <td></td>
+                                        <td>{{ $customer->locations->pluck('truck_type')->filter()->unique()->map(fn($v) => ucfirst($v))->implode(', ') }}</td>
 
                                         <td class="text-center">
                                             <a href="{{ route('customer.edit', $customer->id) }}"
@@ -161,7 +143,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="25" class="text-center">No customers found.</td>
+                                        <td colspan="16" class="text-center">No customers found.</td>
                                     </tr>
                                 @endforelse
                             </tbody>

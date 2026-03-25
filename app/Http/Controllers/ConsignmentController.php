@@ -585,7 +585,22 @@ class ConsignmentController extends Controller
         ]);
     }
 
+    public function bulkStatusUpdate(Request $request)
+    {
+        $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|exists:consignments,id',
+            'status' => 'required|in:Pending,Planning,Completed',
+        ]);
 
+        Consignment::whereIn('id', $request->ids)
+            ->update(['status' => $request->status]);
+
+        return response()->json([
+            'success' => true,
+            'message' => count($request->ids) . ' order(s) status updated to ' . $request->status . '.',
+        ]);
+    }
 
     /**
      * Remove the specified resource from storage.

@@ -35,6 +35,8 @@ Route::middleware(['auth'])->group(function () {
     ->name('consignment-order.store-inline');
     Route::post('/consignment-order/bulk-update', [ConsignmentController::class, 'bulkUpdate'])
     ->name('consignment-order.bulk-update');
+    Route::post('/consignment-order/bulk-status-update', [ConsignmentController::class, 'bulkStatusUpdate'])
+    ->name('consignment-order.bulk-status-update');
     Route::post('/consignment-order/{id}/update-inline', [ConsignmentController::class, 'updateInline'])
     ->name('consignment-order.update-inline');
     Route::resource('truck-summary', TruckSummaryController::class);

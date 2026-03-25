@@ -130,6 +130,17 @@
                                     <i class="bi bi-save me-1" style="font-size: 20px;"></i>
                                     Save
                                 </button>
+                                <select id="bulkStatusSelect" class="form-select d-none" style="width: auto; border-radius: 0.2rem;">
+                                    <option value="" disabled selected>Status</option>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Planning">Planning</option>
+                                    <option value="Completed">Completed</option>
+                                </select>
+                                <button type="button" id="bulkStatusBtn" class="btn btn-info d-none"
+                                    style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
+                                    <i class="bi bi-arrow-repeat me-1" style="font-size: 20px;"></i>
+                                    Update Status
+                                </button>
                                 <button type="button" class="btn btn-success" id="addInlineRowBtn"
                                     style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
                                     <i class="bi bi-plus-circle me-1" style="font-size: 20px;"></i>
@@ -237,6 +248,7 @@
                                             @endif
                                         </a>
                                     </th>
+                                    <th class="sticky-col">Pick Point</th>
                                     <th class="sticky-col">
                                         <a class="text-dark text-decoration-none"
                                             href="{{ route('consignment-order.index', array_merge(request()->query(), ['sort_by' => 'consignee', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'consignee' ? 'desc' : 'asc'])) }}">
@@ -247,6 +259,13 @@
                                             @endif
                                         </a>
                                     </th>
+                                    <th class="sticky-col">Drop Point</th>
+                                    <th>Pick Address</th>
+                                    <th>Drop Address</th>
+                                    <th><span class="d-inline-block" style="white-space: normal;">Pick Truck Size</span></th>
+                                    <th><span class="d-inline-block" style="white-space: normal;">Drop Truck Size</span></th>
+                                    <th><span class="d-inline-block" style="white-space: normal;">Pick Truck Type</span></th>
+                                    <th><span class="d-inline-block" style="white-space: normal;">Drop Truck Type</span></th>
                                     <th><span class="d-inline-block" style="white-space: normal;">
                                             Pick Up Time </span></th>
                                     <th><span class="d-inline-block" style="white-space: normal;">
@@ -369,7 +388,7 @@
                                             @endphp
                                             {!! nl2br(e(wordwrap($consignorDisplay, 20, "\n", true))) !!}
                                         </td>
-
+                                        <td class="sticky-col">{{ $order['pick_point'] ?? '-' }}</td>
 
                                         <td class="sticky-col">
                                             @php
@@ -386,6 +405,13 @@
                                             @endphp
                                             {!! nl2br(e(wordwrap($consigneeDisplay, 20, "\n", true))) !!}
                                         </td>
+                                        <td class="sticky-col">{{ $order['drop_point'] ?? '-' }}</td>
+                                        <td>{{ $order['pick_address'] ?? '-' }}</td>
+                                        <td>{{ $order['drop_address'] ?? '-' }}</td>
+                                        <td>{{ $order['pick_truck_size'] ?? '-' }}</td>
+                                        <td>{{ $order['drop_truck_size'] ?? '-' }}</td>
+                                        <td>{{ $order['pick_truck_type'] ?? '-' }}</td>
+                                        <td>{{ $order['drop_truck_type'] ?? '-' }}</td>
                                         <td>{{ $order['pick_time'] ? \Carbon\Carbon::parse($order['pick_time'])->format('H:i') : '-' }}
                                         </td>
                                         <td>
@@ -511,7 +537,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="25" class="text-center">No consignment orders found.</td>
+                                        <td colspan="23" class="text-center">No consignment orders found.</td>
                                     </tr>
                                 @endforelse
                             </tbody>
@@ -751,10 +777,15 @@
 
         const checkboxes = document.querySelectorAll('.order-row input[type="checkbox"]');
         const saveBtn = document.getElementById('bulkSaveBtn');
+        const bulkStatusSelect = document.getElementById('bulkStatusSelect');
+        const bulkStatusBtn = document.getElementById('bulkStatusBtn');
 
         function toggleSaveButton() {
             const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
             saveBtn.classList.toggle('d-none', !anyChecked);
+            bulkStatusSelect.classList.toggle('d-none', !anyChecked);
+            bulkStatusBtn.classList.toggle('d-none', !anyChecked);
+            if (!anyChecked) bulkStatusSelect.selectedIndex = 0;
         }
 
         const selectAllCheckbox = document.getElementById('selectAllCheckbox');
@@ -834,6 +865,62 @@
                             }
                         })
                         .catch(err => Swal.fire('Error', 'Failed to update orders', 'error'));
+                }
+            });
+        });
+
+        bulkStatusBtn.addEventListener('click', function() {
+            const status = bulkStatusSelect.value;
+            if (!status) {
+                Swal.fire('Error', 'Please select a status first.', 'error');
+                return;
+            }
+
+            const selectedIds = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.closest('tr').dataset.id);
+
+            if (selectedIds.length === 0) {
+                Swal.fire('Error', 'No rows selected.', 'error');
+                return;
+            }
+
+            Swal.fire({
+                title: 'Are you sure?',
+                text: `This will update ${selectedIds.length} order(s) to "${status}".`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, update status!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch("{{ route('consignment-order.bulk-status-update') }}", {
+                            method: "POST",
+                            headers: {
+                                "X-CSRF-TOKEN": "{{ csrf_token() }}",
+                                "Content-Type": "application/json",
+                                "Accept": "application/json"
+                            },
+                            body: JSON.stringify({ ids: selectedIds, status: status })
+                        })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.success) {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Updated!',
+                                    text: data.message,
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                }).then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire('Error', data.message || 'Something went wrong', 'error');
+                            }
+                        })
+                        .catch(err => Swal.fire('Error', 'Failed to update status', 'error'));
                 }
             });
         });
@@ -1538,6 +1625,68 @@
                 top: 0,
                 behavior: 'smooth'
             });
+        });
+
+        // Auto-fill pick/drop point when consignor/consignee is selected in inline edit rows
+        function fetchAndFillLocations(row, name, type) {
+            if (!name) return;
+
+            fetch(`/customers/${encodeURIComponent(name)}/locations`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.locations) return;
+
+                    const typeFilter = type === 'consignor' ? 'pickup' : 'dropoff';
+                    const filtered = data.locations.filter(
+                        loc => loc.type && loc.type.toLowerCase() === typeFilter
+                    );
+
+                    if (type === 'consignor') {
+                        const pointInput = row.querySelector('[name="pick_point"]');
+                        const addressInput = row.querySelector('[name="pick_address"]');
+                        const truckTypeSelect = row.querySelector('[name="pick_truck_type"]');
+                        const truckSizeSelect = row.querySelector('[name="pick_truck_size"]');
+
+                        if (filtered.length > 0) {
+                            const loc = filtered[0];
+                            if (pointInput) pointInput.value = loc.state ?? '';
+                            if (addressInput) addressInput.value = loc.address ?? '';
+                            if (truckTypeSelect && loc.truck_type) truckTypeSelect.value = loc.truck_type;
+                            if (truckSizeSelect && loc.truck_size) truckSizeSelect.value = loc.truck_size;
+                        } else {
+                            if (pointInput) pointInput.value = '';
+                            if (addressInput) addressInput.value = '';
+                        }
+                    } else if (type === 'consignee') {
+                        const pointInput = row.querySelector('[name="drop_point"]');
+                        const addressInput = row.querySelector('[name="drop_address"]');
+                        const truckTypeSelect = row.querySelector('[name="drop_truck_type"]');
+                        const truckSizeSelect = row.querySelector('[name="drop_truck_size"]');
+
+                        if (filtered.length > 0) {
+                            const loc = filtered[0];
+                            if (pointInput) pointInput.value = loc.state ?? '';
+                            if (addressInput) addressInput.value = loc.address ?? '';
+                            if (truckTypeSelect && loc.truck_type) truckTypeSelect.value = loc.truck_type;
+                            if (truckSizeSelect && loc.truck_size) truckSizeSelect.value = loc.truck_size;
+                        } else {
+                            if (pointInput) pointInput.value = '';
+                            if (addressInput) addressInput.value = '';
+                        }
+                    }
+                })
+                .catch(err => console.error('Error fetching locations:', err));
+        }
+
+        tableBody.addEventListener('change', function(e) {
+            const row = e.target.closest('.inline-edit-row');
+            if (!row) return;
+
+            if (e.target.matches('[name="consignor"]')) {
+                fetchAndFillLocations(row, e.target.value, 'consignor');
+            } else if (e.target.matches('[name="consignee"]')) {
+                fetchAndFillLocations(row, e.target.value, 'consignee');
+            }
         });
 
         // Event delegation for save/cancel buttons

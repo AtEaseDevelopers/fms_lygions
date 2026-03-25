@@ -35,7 +35,7 @@ class CustomerController extends Controller
             $query->ofType($as);
         }
 
-        $customers = $query->orderBy($sortBy, $sortOrder)->paginate($perPage);
+        $customers = $query->with('locations')->orderBy($sortBy, $sortOrder)->paginate($perPage);
         $customers->appends($request->all());
 
         return view('master-data.customer.customer', compact('customers'));
