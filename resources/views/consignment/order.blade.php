@@ -316,7 +316,7 @@
                                             @endif
                                         </a>
                                     </th>
-                                    <th>Express</th>
+                                    <th style="text-align: center">Express</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -1413,7 +1413,10 @@
                     </select>
                 </td>
                 <td>
-                    <input type="checkbox" name="express_mode" value="1" class="form-check-input" ${expressMode === '1' ? 'checked' : ''}>
+                    <select class="form-select form-select-sm" name="express_mode">
+                        <option value="0"${expressMode === '1' ? '' : ' selected'}>No</option>
+                        <option value="1"${expressMode === '1' ? ' selected' : ''}>Yes</option>
+                    </select>
                 </td>
                 <td></td>
             `;
@@ -1606,7 +1609,10 @@
             </select>
         </td>
         <td>
-            <input type="checkbox" name="express_mode" value="1" class="form-check-input">
+            <select class="form-select form-select-sm" name="express_mode">
+                <option value="0" selected>No</option>
+                <option value="1">Yes</option>
+            </select>
         </td>
         <td></td>
     `;
@@ -1649,7 +1655,7 @@
 
                         if (filtered.length > 0) {
                             const loc = filtered[0];
-                            if (pointInput) pointInput.value = loc.state ?? '';
+                            if (pointInput) pointInput.value = loc.pickup_dropoff_point ?? loc.state ?? '';
                             if (addressInput) addressInput.value = loc.address ?? '';
                             if (truckTypeSelect && loc.truck_type) truckTypeSelect.value = loc.truck_type;
                             if (truckSizeSelect && loc.truck_size) truckSizeSelect.value = loc.truck_size;
@@ -1665,7 +1671,7 @@
 
                         if (filtered.length > 0) {
                             const loc = filtered[0];
-                            if (pointInput) pointInput.value = loc.state ?? '';
+                            if (pointInput) pointInput.value = loc.pickup_dropoff_point ?? loc.state ?? '';
                             if (addressInput) addressInput.value = loc.address ?? '';
                             if (truckTypeSelect && loc.truck_type) truckTypeSelect.value = loc.truck_type;
                             if (truckSizeSelect && loc.truck_size) truckSizeSelect.value = loc.truck_size;

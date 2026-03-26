@@ -223,6 +223,7 @@
                                         <th style="width: 50px;">No.</th>
                                         <th>State</th>
                                         <th>Address</th>
+                                        <th>Pick/Drop Point</th>
                                         <th>PIC</th>
                                         <th>Phone</th>
                                         <th>Mode Type</th>
@@ -302,6 +303,7 @@
             </select>
         </td>
         <td><input type="text" class="form-control" name="locations[${rowCount}][address]"></td>
+        <td><input type="text" class="form-control" name="locations[${rowCount}][pickup_dropoff_point]"></td>
         <td><input type="text" class="form-control" name="locations[${rowCount}][pic]"></td>
         <td><input type="text" class="form-control" name="locations[${rowCount}][phone]"></td>
         <td>

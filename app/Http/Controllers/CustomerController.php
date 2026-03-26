@@ -130,6 +130,7 @@ class CustomerController extends Controller
                             'type' => $loc->type,
                             'truck_size' => $loc->truck_size,
                             'truck_type' => $loc->truck_type,
+                            'pickup_dropoff_point' => $loc->pickup_dropoff_point,
                         ]);
                     }
                 }
@@ -178,6 +179,7 @@ class CustomerController extends Controller
             'locations.*.type' => 'nullable|string|max:255',
             'locations.*.truck_type' => 'nullable|string|max:255',
             'locations.*.truck_size' => 'nullable|string|max:255',
+            'locations.*.pickup_dropoff_point' => 'nullable|string|max:255',
         ], [
             'name.required' => 'Please enter the customer name.',
             'account_number.unique' => 'This account number is already taken.',
@@ -253,6 +255,7 @@ class CustomerController extends Controller
             'locations.*.type' => 'nullable|string|max:255',
             'locations.*.load_type' => 'nullable|array',
             'locations.*.load_type.*' => 'string|max:50',
+            'locations.*.pickup_dropoff_point' => 'nullable|string|max:255',
         ]);
 
         $customer->update($request->only([
@@ -297,6 +300,7 @@ class CustomerController extends Controller
             'locations.*.type' => 'nullable|string|max:255',
             'locations.*.load_type' => 'nullable|array',
             'locations.*.load_type.*' => 'string|max:50',
+            'locations.*.pickup_dropoff_point' => 'nullable|string|max:255',
         ]);
 
         $draftCustomer->update($request->only([

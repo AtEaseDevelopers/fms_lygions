@@ -122,7 +122,7 @@
                                         <td>{{ $customer->service_tax_no }}</td>
                                         <td>{{ $customer->contact_person }}</td>
                                         <td>{{ $customer->term }}</td>
-                                        <td></td>
+                                        <td>{{ $customer->locations->pluck('pickup_dropoff_point')->filter()->unique()->implode(', ') }}</td>
                                         <td>{{ $customer->locations->pluck('truck_type')->filter()->unique()->map(fn($v) => ucfirst($v))->implode(', ') }}</td>
 
                                         <td class="text-center">

@@ -24,6 +24,7 @@ class CustomerLocation extends Model
         'truck_size',
         'truck_type',
         'load_type',
+        'pickup_dropoff_point',
         // Virtual field names (mapped via mutators)
         'state',
         'address',

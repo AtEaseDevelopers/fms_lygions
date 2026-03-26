@@ -178,6 +178,7 @@
                                 <th>No.</th>
                                 <th>State</th>
                                 <th>Address</th>
+                                <th>Pick/Drop Point</th>
                                 <th>PIC</th>
                                 <th>Phone</th>
                                 <th> Mode Type</th>
@@ -237,6 +238,10 @@
                                     <td>
                                         <input type="text" name="locations[{{ $loop->index }}][address]"
                                             class="form-control" value="{{ $location->address }}">
+                                    </td>
+                                    <td>
+                                        <input type="text" name="locations[{{ $loop->index }}][pickup_dropoff_point]"
+                                            class="form-control" value="{{ $location->pickup_dropoff_point }}">
                                     </td>
                                     <td>
                                         <input type="text" name="locations[{{ $loop->index }}][pic]"
@@ -375,6 +380,7 @@
                 <option value="Singapore">Singapore</option>
             </select></td>
             <td><input type="text" name="locations[${rowCount}][address]" class="form-control"></td>
+            <td><input type="text" name="locations[${rowCount}][pickup_dropoff_point]" class="form-control"></td>
             <td><input type="text" name="locations[${rowCount}][pic]" class="form-control"></td>
             <td><input type="text" name="locations[${rowCount}][phone]" class="form-control"></td>
             <td>

@@ -411,7 +411,7 @@
 
             filteredLocations.forEach(loc => {
                 const optionPoint = document.createElement('option');
-                optionPoint.value = loc.state;
+                optionPoint.value = loc.pickup_dropoff_point ?? loc.state;
                 optionPoint.dataset.id = loc.id;
                 pointList.appendChild(optionPoint);
 
@@ -424,7 +424,7 @@
             if (filteredLocations.length > 0) {
                 const loc = filteredLocations[0];
 
-                pointInput.value = loc.state ?? '';
+                pointInput.value = loc.pickup_dropoff_point ?? loc.state ?? '';
                 addressInput.value = loc.address ?? '';
 
                 if (truckTypeSelect && loc.truck_type) {

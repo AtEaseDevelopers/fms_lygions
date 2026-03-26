@@ -642,6 +642,7 @@ class ConsignmentController extends Controller
                     'default_truck_type' => $loc->default_truck_type,
                     'truck_size' => $loc->truck_size,
                     'truck_type' => $loc->truck_type,
+                    'pickup_dropoff_point' => $loc->pickup_dropoff_point,
                 ];
             }),
         ]);
