@@ -488,22 +488,18 @@
                 let matchPick = true;
                 let matchDrop = true;
 
-                // "all" or empty = no type filter, but still apply size if set
+                // "all" or empty = no type filter; "any" or empty = no size filter
                 if (pickType && pickType !== 'all') {
                     matchPick = tType === pickType;
-                    if (matchPick && pickSize && tSize) {
-                        matchPick = tSize === pickSize;
-                    }
-                } else if (pickSize) {
+                }
+                if (matchPick && pickSize && pickSize !== 'any' && tSize) {
                     matchPick = tSize === pickSize;
                 }
 
                 if (dropType && dropType !== 'all') {
                     matchDrop = tType === dropType;
-                    if (matchDrop && dropSize && tSize) {
-                        matchDrop = tSize === dropSize;
-                    }
-                } else if (dropSize) {
+                }
+                if (matchDrop && dropSize && dropSize !== 'any' && tSize) {
                     matchDrop = tSize === dropSize;
                 }
 
