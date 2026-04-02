@@ -61,4 +61,5 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/subcon/sync', [SubconController::class, 'syncFromLygions'])->name('subcon.sync');
     Route::post('/draft-customer/sync', [CustomerController::class, 'syncDraftToCustomer'])->name('draft-customer.sync');
     Route::get('/customers/{name}/locations', [ConsignmentController::class, 'getCustomerLocations'])->name('customers.locations');
+    Route::get('/api/available-trucks', [ConsignmentController::class, 'getAvailableTrucks'])->name('api.available-trucks');
 });

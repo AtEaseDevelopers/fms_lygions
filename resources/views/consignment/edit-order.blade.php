@@ -288,16 +288,13 @@
                                                 @endforeach
                                             </select>
                                         </div>
-                                        <div class="col-md-2">
-                                            @if ($i === 0)
-                                                <button type="button" class="btn btn-success btn-sm addRow">
-                                                    <i class="bi bi-plus"></i>
-                                                </button>
-                                            @else
-                                                <button type="button" class="btn btn-danger btn-sm removeRow">
-                                                    <i class="bi bi-dash"></i>
-                                                </button>
-                                            @endif
+                                        <div class="col-md-2 d-flex gap-1">
+                                            <button type="button" class="btn btn-success btn-sm addRow">
+                                                <i class="bi bi-plus"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-danger btn-sm removeRow" {!! $count <= 1 ? 'style="display:none;"' : '' !!}>
+                                                <i class="bi bi-dash"></i>
+                                            </button>
                                         </div>
                                     </div>
                                 @endfor
@@ -318,9 +315,12 @@
                                                 @endforeach
                                             </select>
                                         </div>
-                                        <div class="col-md-2">
+                                        <div class="col-md-2 d-flex gap-1">
                                             <button type="button" class="btn btn-success btn-sm addRow">
                                                 <i class="bi bi-plus"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-danger btn-sm removeRow" style="display:none;">
+                                                <i class="bi bi-dash"></i>
                                             </button>
                                         </div>
                                     </div>
@@ -435,15 +435,40 @@
 
         const allTrucks = @json($trucks);
         const allSubcons = @json($subcons ?? []);
+        let availableTrucks = allTrucks;
+        let availableSubcons = allSubcons;
+        const currentTruckNumber = document.getElementById(`truck_number_${modalId}`)?.value || '';
 
         const pickTypeEl = document.getElementById(`pick_truck_type_${modalId}`);
         const dropTypeEl = document.getElementById(`drop_truck_type_${modalId}`);
         const pickSizeEl = document.getElementById(`pick_truck_size_${modalId}`);
         const dropSizeEl = document.getElementById(`drop_truck_size_${modalId}`);
         const truckDatalist = document.getElementById(`truck_list_${modalId}`);
+        const loadDateEl = document.getElementById(`load_date_${modalId}`);
 
         function normalize(v) {
             return (v || '').toString().trim().toLowerCase();
+        }
+
+        function fetchAvailableTrucks(date) {
+            if (!date) {
+                availableTrucks = allTrucks;
+                availableSubcons = allSubcons;
+                updateTruckNumbers();
+                return;
+            }
+            fetch(`/api/available-trucks?date=${date}`)
+                .then(r => r.json())
+                .then(data => {
+                    availableTrucks = data.trucks;
+                    availableSubcons = data.subcons;
+                    updateTruckNumbers();
+                })
+                .catch(() => {
+                    availableTrucks = allTrucks;
+                    availableSubcons = allSubcons;
+                    updateTruckNumbers();
+                });
         }
 
         function updateTruckNumbers() {
@@ -463,42 +488,74 @@
                 let matchPick = true;
                 let matchDrop = true;
 
-                if (pickType) {
+                // "all" or empty = no type filter, but still apply size if set
+                if (pickType && pickType !== 'all') {
                     matchPick = tType === pickType;
-                    if (matchPick && tSize && pickSize) {
+                    if (matchPick && pickSize && tSize) {
                         matchPick = tSize === pickSize;
                     }
+                } else if (pickSize) {
+                    matchPick = tSize === pickSize;
                 }
 
-                if (dropType) {
+                if (dropType && dropType !== 'all') {
                     matchDrop = tType === dropType;
-                    if (matchDrop && tSize && dropSize) {
+                    if (matchDrop && dropSize && tSize) {
                         matchDrop = tSize === dropSize;
                     }
+                } else if (dropSize) {
+                    matchDrop = tSize === dropSize;
                 }
 
-                return matchPick || matchDrop;
+                return matchPick && matchDrop;
             }
 
             // Add filtered trucks
-            allTrucks.filter(isValid).forEach(t => {
+            const addedNumbers = new Set();
+            availableTrucks.filter(isValid).forEach(t => {
                 const opt = document.createElement('option');
                 opt.value = t.number;
                 truckDatalist.appendChild(opt);
+                addedNumbers.add(t.number);
             });
 
+            // Ensure currently assigned truck is always in the list
+            if (currentTruckNumber && !addedNumbers.has(currentTruckNumber) && !currentTruckNumber.includes('(Subcon)')) {
+                const opt = document.createElement('option');
+                opt.value = currentTruckNumber;
+                truckDatalist.appendChild(opt);
+            }
+
             // Add filtered subcons
-            allSubcons.filter(isValid).forEach(s => {
+            availableSubcons.filter(isValid).forEach(s => {
                 const opt = document.createElement('option');
                 opt.value = s.truck_no + ' (Subcon)';
                 truckDatalist.appendChild(opt);
             });
+
+            // Force browser to refresh datalist
+            const truckInput = document.getElementById(`truck_number_${modalId}`);
+            if (truckInput) {
+                truckInput.removeAttribute('list');
+                setTimeout(() => truckInput.setAttribute('list', `truck_list_${modalId}`), 0);
+            }
         }
 
-        // Initial load
-        updateTruckNumbers();
+        // Fetch available trucks on load based on current load_date
+        if (loadDateEl && loadDateEl.value) {
+            fetchAvailableTrucks(loadDateEl.value);
+        } else {
+            updateTruckNumbers();
+        }
 
-        // Re-filter on change
+        // Re-fetch when load_date changes
+        if (loadDateEl) {
+            loadDateEl.addEventListener('change', function() {
+                fetchAvailableTrucks(this.value);
+            });
+        }
+
+        // Re-filter on truck type/size change
         [pickTypeEl, dropTypeEl, pickSizeEl, dropSizeEl].forEach(el => {
             if (el) el.addEventListener('change', updateTruckNumbers);
         });

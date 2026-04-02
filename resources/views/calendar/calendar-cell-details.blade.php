@@ -62,7 +62,7 @@
                     </tr>
                     <tr>
                         <th>Total Capacity</th>
-                        <td>{{ $usedCapacity }}/{{ $totalCapacity }}</td>
+                        <td>{{ $totalCapacity - $usedCapacity }}/{{ $totalCapacity }}</td>
                     </tr>
                 @endif
                 @if ($availability?->status != null && $consignments->count() == 0)

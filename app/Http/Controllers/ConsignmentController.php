@@ -139,6 +139,95 @@ class ConsignmentController extends Controller
         return view('consignment.order', compact('customers', 'consignments', 'trucks_no', 'trucks_grp'));
     }
 
+    private function getTrucksWithCapacity(string $date)
+    {
+        $trucks = Truck::select('id', 'number', 'group', 'tonnage', 'floor_space', 'chassis_type', 'size')
+            ->where('is_outsider', 0)
+            ->get();
+
+        $unitSpaces = Unit::pluck('space', 'unit')->toArray();
+
+        foreach ($trucks as $truck) {
+            $csn = Consignment::where('truck_number', $truck->number)
+                ->where('load_date', $date)
+                ->get();
+
+            $used = $csn->sum(function ($c) use ($unitSpaces) {
+                $parseToArray = function ($v) {
+                    if (is_string($v)) {
+                        $decoded = json_decode($v, true);
+                        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                            return array_map('trim', $decoded);
+                        }
+                    }
+                    return is_array($v) ? $v : array_map('trim', explode(',', (string) $v));
+                };
+
+                $qtys = $parseToArray($c->quantity);
+                $unitStrings = $parseToArray($c->unit);
+
+                $units = array_map(function ($u) use ($unitSpaces) {
+                    $key = trim($u);
+                    return isset($unitSpaces[$key]) ? (float) $unitSpaces[$key] : 0;
+                }, $unitStrings);
+
+                $max = max(count($qtys), count($units), 1);
+                $balance = (float) 0;
+
+                for ($i = 0; $i < $max; $i++) {
+                    $q = (float) ($qtys[$i] ?? ($qtys[0] ?? 0));
+                    $u = (float) ($units[$i] ?? ($units[0] ?? 1));
+                    $balance += $q * $u;
+                }
+
+                return $balance;
+            });
+
+            $truck->used = $used;
+            $truck->remaining = max(0, (float) $truck->floor_space - $used);
+        }
+
+        return $trucks;
+    }
+
+    public function getAvailableTrucks(Request $request)
+    {
+        $date = $request->input('date', now()->format('Y-m-d'));
+
+        $trucks = $this->getTrucksWithCapacity($date);
+
+        // Filter by availability status
+        $availableTruckIds = Availability::where('date', $date)
+            ->whereIn('status', ['available', 'occupied'])
+            ->pluck('truck_id')
+            ->unique();
+
+        $availableSubconIds = Availability::where('date', $date)
+            ->whereIn('status', ['available', 'occupied'])
+            ->whereNotNull('subcon_id')
+            ->pluck('subcon_id')
+            ->unique();
+
+        $available = $trucks->filter(fn($t) => $availableTruckIds->contains($t->id) && $t->remaining > 0);
+
+        $subcons = Subcon::select('id', 'truck_no', 'chassis_type', 'size')->get()
+            ->filter(fn($s) => $availableSubconIds->contains($s->id));
+
+        return response()->json([
+            'trucks' => $available->map(fn($t) => [
+                'number' => $t->number,
+                'chassis_type' => $t->chassis_type,
+                'size' => $t->size,
+                'remaining' => $t->remaining,
+                'floor_space' => $t->floor_space,
+            ])->values(),
+            'subcons' => $subcons->map(fn($s) => [
+                'truck_no' => $s->truck_no,
+                'chassis_type' => $s->chassis_type,
+                'size' => $s->size,
+            ])->values(),
+        ]);
+    }
 
     public function archivedIndex(Request $request)
     {
@@ -290,7 +379,7 @@ class ConsignmentController extends Controller
             'drop_address' => $request->drop_address,
             'unit' => $unitJson,
             'status' => $request->status ?? 'Pending',
-            'express_mode' => $request->has('express_mode'),
+            'express_mode' => (bool) $request->input('express_mode'),
         ]);
 
         if ($request->has('express_mode')) {
@@ -412,7 +501,7 @@ class ConsignmentController extends Controller
             'drop_address' => $request->drop_address,
             'unit' => $unitJson,
             'status' => $request->status ?? 'Pending',
-            'express_mode' => $request->has('express_mode'),
+            'express_mode' => (bool) $request->input('express_mode'),
         ]);
 
         // Express mode logic (same as your store method)
@@ -553,7 +642,7 @@ class ConsignmentController extends Controller
             'pick_address' => $request->pick_address,
             'drop_address' => $request->drop_address,
             'status' => $request->status ?? 'Pending',
-            'express_mode' => $request->has('express_mode'),
+            'express_mode' => (bool) $request->input('express_mode'),
         ]);
 
         return response()->json([

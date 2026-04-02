@@ -128,7 +128,7 @@
                                 <button type="button" id="bulkSaveBtn" class="btn btn-success d-none"
                                     style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
                                     <i class="bi bi-save me-1" style="font-size: 20px;"></i>
-                                    Save
+                                    Bulk Save
                                 </button>
                                 <select id="bulkStatusSelect" class="form-select d-none" style="width: auto; border-radius: 0.2rem;">
                                     <option value="" disabled selected>Status</option>
@@ -928,6 +928,7 @@
         // Get truck data
         const ALL_TRUCKS = @json($trucks);
         const ALL_SUBCONS = @json($subcons);
+        const truckCacheByDate = {};
 
         function normalize(val) {
             return (val || '').toString().trim().toLowerCase();
@@ -966,8 +967,7 @@
             return matchPick || matchDrop;
         }
 
-        // Populate all truck number dropdowns
-        document.querySelectorAll('.order-row').forEach(row => {
+        function populateRowSelect(row, trucks, subcons) {
             const pickType = normalize(row.dataset.pickType);
             const pickSize = normalize(row.dataset.pickSize);
             const dropType = normalize(row.dataset.dropType);
@@ -991,7 +991,7 @@
             select.disabled = false;
 
             // Add matching main trucks
-            ALL_TRUCKS
+            trucks
                 .filter(t => isValidTruck(t, pickType, pickSize, dropType, dropSize))
                 .forEach(t => {
                     const opt = document.createElement('option');
@@ -1002,7 +1002,7 @@
                 });
 
             // Add matching subcon trucks
-            ALL_SUBCONS
+            subcons
                 .filter(s => isValidTruck(s, pickType, pickSize, dropType, dropSize))
                 .forEach(s => {
                     const opt = document.createElement('option');
@@ -1011,7 +1011,53 @@
                     if (s.truck_no === selectedTruck) opt.selected = true;
                     select.appendChild(opt);
                 });
-        });
+
+            // Ensure currently assigned truck is always in the list
+            if (selectedTruck && !select.querySelector(`option[value="${selectedTruck}"]`)) {
+                const opt = document.createElement('option');
+                opt.value = selectedTruck;
+                opt.textContent = selectedTruck;
+                opt.selected = true;
+                select.insertBefore(opt, select.options[1] || null);
+            }
+        }
+
+        // Fetch available trucks by date and populate row selects
+        function fetchAndPopulateRows() {
+            const rows = document.querySelectorAll('.order-row');
+            const dateRows = {};
+
+            rows.forEach(row => {
+                const loadDate = row.dataset.loadDate || '';
+                if (!dateRows[loadDate]) dateRows[loadDate] = [];
+                dateRows[loadDate].push(row);
+            });
+
+            Object.keys(dateRows).forEach(date => {
+                if (!date) {
+                    dateRows[date].forEach(row => populateRowSelect(row, ALL_TRUCKS, ALL_SUBCONS));
+                    return;
+                }
+
+                if (truckCacheByDate[date]) {
+                    const cached = truckCacheByDate[date];
+                    dateRows[date].forEach(row => populateRowSelect(row, cached.trucks, cached.subcons));
+                    return;
+                }
+
+                fetch(`/api/available-trucks?date=${date}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        truckCacheByDate[date] = data;
+                        dateRows[date].forEach(row => populateRowSelect(row, data.trucks, data.subcons));
+                    })
+                    .catch(() => {
+                        dateRows[date].forEach(row => populateRowSelect(row, ALL_TRUCKS, ALL_SUBCONS));
+                    });
+            });
+        }
+
+        fetchAndPopulateRows();
 
         // Set sticky column positions
         setTimeout(function() {
@@ -1179,7 +1225,7 @@
 
         // Add/Remove quantity-unit rows
         document.addEventListener("click", function(e) {
-            // Add new row
+            // Add new row (modal)
             const addBtn = e.target.closest(".addRow");
             if (addBtn) {
                 const container = addBtn.closest(".quantityUnitContainer");
@@ -1193,22 +1239,30 @@
                     select.selectedIndex = 0;
                 });
 
-                const btn = clone.querySelector(".addRow");
-                btn.classList.remove("btn-success", "addRow");
-                btn.classList.add("btn-danger", "removeRow");
-                btn.innerHTML = '<i class="bi bi-dash"></i>';
-
                 container.appendChild(clone);
+
+                // Show all remove buttons when there are multiple rows
+                container.querySelectorAll(".removeRow").forEach(btn => {
+                    btn.style.display = "";
+                });
             }
 
-            // Remove row
+            // Remove row (modal)
             const removeBtn = e.target.closest(".removeRow");
             if (removeBtn) {
                 const row = removeBtn.closest(".quantity-unit-row");
-                if (document.querySelectorAll(".quantity-unit-row").length > 1) {
+                const container = row.closest(".quantityUnitContainer");
+                const rows = container.querySelectorAll(".quantity-unit-row");
+                if (rows.length > 1) {
                     row.remove();
+                    // Hide remove button if only one row left
+                    const remaining = container.querySelectorAll(".quantity-unit-row");
+                    if (remaining.length === 1) {
+                        remaining[0].querySelector(".removeRow").style.display = "none";
+                    }
                 }
             }
+
         });
         // Add Inline Row functionality
         const addInlineRowBtn = document.getElementById('addInlineRowBtn');
@@ -1263,14 +1317,31 @@
             const originalClassName = row.className;
             const originalDataset = { ...row.dataset };
 
-            let unitsOptions = '<option value="">-</option>';
-            if (UNITS && Array.isArray(UNITS)) {
-                unitsOptions += UNITS.map(u => {
-                    const unitUpper = (u.unit || '').toUpperCase();
-                    const unitDesc = u.desc || '';
-                    const sel = (unitValues[0] || '') === u.unit ? ' selected' : '';
-                    return `<option value="${u.unit}"${sel}>${unitUpper} — ${unitDesc}</option>`;
-                }).join('');
+            // Build unit options helper for a given selected value
+            function buildUnitsOptions(selectedUnit) {
+                let opts = '<option value="">-</option>';
+                if (UNITS && Array.isArray(UNITS)) {
+                    opts += UNITS.map(u => {
+                        const unitUpper = (u.unit || '').toUpperCase();
+                        const unitDesc = u.desc || '';
+                        const sel = (selectedUnit || '') === u.unit ? ' selected' : '';
+                        return `<option value="${u.unit}"${sel}>${unitUpper} — ${unitDesc}</option>`;
+                    }).join('');
+                }
+                return opts;
+            }
+
+            // Build quantity/unit rows HTML for inline edit
+            const pairCount = Math.max(quantities.length, unitValues.length, 1);
+            let qtyUnitRows = '';
+            for (let i = 0; i < pairCount; i++) {
+                qtyUnitRows += `
+                    <div class="d-flex align-items-center gap-1 mb-1 inline-qty-unit-row">
+                        <input type="number" class="form-control form-control-sm" name="quantity[]" placeholder="Qty" value="${quantities[i] || ''}" style="width:60px">
+                        <select class="form-select form-select-sm" name="unit[]" style="width:120px">
+                            ${buildUnitsOptions(unitValues[i] || '')}
+                        </select>
+                    </div>`;
             }
 
             let truckGroupsOptions = '<option value="">-</option><option value="all"' + (pickTruckType === 'all' ? ' selected' : '') + '>ALL</option>';
@@ -1294,12 +1365,7 @@
             }
 
             let truckOptions = '<option value="">-</option>';
-            if (ALL_TRUCKS && Array.isArray(ALL_TRUCKS)) {
-                truckOptions += ALL_TRUCKS.map(t => `<option value="${t.number}"${t.number === truckNumber ? ' selected' : ''}>${t.number}</option>`).join('');
-            }
-            if (ALL_SUBCONS && Array.isArray(ALL_SUBCONS)) {
-                truckOptions += ALL_SUBCONS.map(s => `<option value="${s.truck_no}"${s.truck_no === truckNumber ? ' selected' : ''}>${s.truck_no} (Subcon)</option>`).join('');
-            }
+            // Will be populated via AJAX after row is rendered
 
             function sizeOptions(selected) {
                 return `<option value=""${!selected ? ' selected' : ''}>-</option>
@@ -1377,13 +1443,10 @@
                 <td>
                     <input type="time" class="form-control form-control-sm" name="pick_time" value="${escapeAttr(pickTime)}">
                 </td>
-                <td>
-                    <input type="number" class="form-control form-control-sm" name="quantity[]" placeholder="Qty" value="${quantities[0] || ''}">
-                </td>
-                <td>
-                    <select class="form-select form-select-sm" name="unit[]">
-                        ${unitsOptions}
-                    </select>
+                <td colspan="2">
+                    <div class="inline-qty-unit-container">
+                        ${qtyUnitRows}
+                    </div>
                 </td>
                 <td>
                     <select class="form-select form-select-sm" name="pre_pick">
@@ -1421,7 +1484,72 @@
                 <td></td>
             `;
 
+            // Populate truck select based on load_date capacity
+            populateInlineTruckSelect(row, loadDate, truckNumber);
+
+            // Re-populate truck select when load_date changes in inline edit
+            const loadDateInput = row.querySelector('[name="load_date"]');
+            if (loadDateInput) {
+                loadDateInput.addEventListener('change', function() {
+                    const currentTruck = row.querySelector('[name="truck_number"]')?.value || '';
+                    populateInlineTruckSelect(row, this.value, currentTruck);
+                });
+            }
+
             return row;
+        }
+
+        function populateInlineTruckSelect(row, date, selectedTruck) {
+            const select = row.querySelector('[name="truck_number"]');
+            if (!select) return;
+
+            function fillOptions(trucks, subcons) {
+                select.innerHTML = '<option value="">-</option>';
+                if (trucks && Array.isArray(trucks)) {
+                    trucks.forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t.number;
+                        opt.textContent = t.number;
+                        if (t.number === selectedTruck) opt.selected = true;
+                        select.appendChild(opt);
+                    });
+                }
+                // Ensure currently assigned truck stays in list
+                if (selectedTruck && !select.querySelector(`option[value="${selectedTruck}"]`)) {
+                    const opt = document.createElement('option');
+                    opt.value = selectedTruck;
+                    opt.textContent = selectedTruck;
+                    opt.selected = true;
+                    select.insertBefore(opt, select.options[1] || null);
+                }
+                if (subcons && Array.isArray(subcons)) {
+                    subcons.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.truck_no;
+                        opt.textContent = s.truck_no + ' (Subcon)';
+                        if (s.truck_no === selectedTruck) opt.selected = true;
+                        select.appendChild(opt);
+                    });
+                }
+            }
+
+            if (!date) {
+                fillOptions(ALL_TRUCKS, ALL_SUBCONS);
+                return;
+            }
+
+            if (truckCacheByDate[date]) {
+                fillOptions(truckCacheByDate[date].trucks, truckCacheByDate[date].subcons);
+                return;
+            }
+
+            fetch(`/api/available-trucks?date=${date}`)
+                .then(r => r.json())
+                .then(data => {
+                    truckCacheByDate[date] = data;
+                    fillOptions(data.trucks, data.subcons);
+                })
+                .catch(() => fillOptions(ALL_TRUCKS, ALL_SUBCONS));
         }
 
         function recalculateStickyColumns() {
@@ -1491,16 +1619,8 @@
                 consigneeOptions = CONSIGNEES.map(c => `<option value="${c}"></option>`).join('');
             }
 
-            // Build truck options
+            // Truck options will be populated via AJAX after row is rendered
             let truckOptions = '<option value="">-</option>';
-            if (ALL_TRUCKS && Array.isArray(ALL_TRUCKS)) {
-                truckOptions += ALL_TRUCKS.map(t => `<option value="${t.number}">${t.number}</option>`)
-                    .join('');
-            }
-            if (ALL_SUBCONS && Array.isArray(ALL_SUBCONS)) {
-                truckOptions += ALL_SUBCONS.map(s =>
-                    `<option value="${s.truck_no}">${s.truck_no} (Subcon)</option>`).join('');
-            }
 
             // Create new editable row
             const newRow = document.createElement('tr');
@@ -1573,13 +1693,15 @@
         <td>
             <input type="time" class="form-control form-control-sm" name="pick_time">
         </td>
-        <td>
-            <input type="number" class="form-control form-control-sm" name="quantity[]" placeholder="Qty">
-        </td>
-        <td>
-            <select class="form-select form-select-sm" name="unit[]">
-                ${unitsOptions}
-            </select>
+        <td colspan="2">
+            <div class="inline-qty-unit-container">
+                <div class="d-flex align-items-center gap-1 mb-1 inline-qty-unit-row">
+                    <input type="number" class="form-control form-control-sm" name="quantity[]" placeholder="Qty" style="width:60px">
+                    <select class="form-select form-select-sm" name="unit[]" style="width:120px">
+                        ${unitsOptions}
+                    </select>
+                </div>
+            </div>
         </td>
         <td>
             <select class="form-select form-select-sm" name="pre_pick">
@@ -1619,6 +1741,15 @@
 
             // Insert at the top of tbody
             tableBody.insertBefore(newRow, tableBody.firstChild);
+
+            // Add load_date change listener to populate truck options
+            const newLoadDateInput = newRow.querySelector('[name="load_date"]');
+            if (newLoadDateInput) {
+                newLoadDateInput.addEventListener('change', function() {
+                    const currentTruck = newRow.querySelector('[name="truck_number"]')?.value || '';
+                    populateInlineTruckSelect(newRow, this.value, currentTruck);
+                });
+            }
 
             // Recalculate sticky column positions
             recalculateStickyColumns();
@@ -1983,6 +2114,7 @@
             const dropType = normalize(row.dataset.dropType);
             const dropSize = normalize(row.dataset.dropSize);
             const selectedTruck = row.dataset.selectedTruck;
+            const loadDate = row.dataset.loadDate || '';
 
             const select = row.querySelector('.truck-number-select');
             if (!select) return;
@@ -1995,28 +2127,54 @@
                 return;
             }
 
-            select.innerHTML = '<option value="">-</option>';
-            select.disabled = false;
+            function fillSelect(trucks, subcons) {
+                select.innerHTML = '<option value="">-</option>';
+                select.disabled = false;
 
-            ALL_TRUCKS
-                .filter(t => isValidTruck(t, pickType, pickSize, dropType, dropSize))
-                .forEach(t => {
-                    const opt = document.createElement('option');
-                    opt.value = t.number;
-                    opt.textContent = t.number;
-                    if (t.number === selectedTruck) opt.selected = true;
-                    select.appendChild(opt);
-                });
+                trucks
+                    .filter(t => isValidTruck(t, pickType, pickSize, dropType, dropSize))
+                    .forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t.number;
+                        opt.textContent = t.number;
+                        if (t.number === selectedTruck) opt.selected = true;
+                        select.appendChild(opt);
+                    });
 
-            ALL_SUBCONS
-                .filter(s => isValidTruck(s, pickType, pickSize, dropType, dropSize))
-                .forEach(s => {
+                // Ensure currently assigned truck is always in the list
+                if (selectedTruck && !select.querySelector(`option[value="${selectedTruck}"]`)) {
                     const opt = document.createElement('option');
-                    opt.value = s.truck_no;
-                    opt.textContent = s.truck_no + ' (Subcon)';
-                    if (s.truck_no === selectedTruck) opt.selected = true;
-                    select.appendChild(opt);
-                });
+                    opt.value = selectedTruck;
+                    opt.textContent = selectedTruck;
+                    opt.selected = true;
+                    select.insertBefore(opt, select.options[1] || null);
+                }
+
+                subcons
+                    .filter(s => isValidTruck(s, pickType, pickSize, dropType, dropSize))
+                    .forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.truck_no;
+                        opt.textContent = s.truck_no + ' (Subcon)';
+                        if (s.truck_no === selectedTruck) opt.selected = true;
+                        select.appendChild(opt);
+                    });
+            }
+
+            if (loadDate && truckCacheByDate[loadDate]) {
+                const cached = truckCacheByDate[loadDate];
+                fillSelect(cached.trucks, cached.subcons);
+            } else if (loadDate) {
+                fetch(`/api/available-trucks?date=${loadDate}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        truckCacheByDate[loadDate] = data;
+                        fillSelect(data.trucks, data.subcons);
+                    })
+                    .catch(() => fillSelect(ALL_TRUCKS, ALL_SUBCONS));
+            } else {
+                fillSelect(ALL_TRUCKS, ALL_SUBCONS);
+            }
         }
 
         // Helper: handle delete form submission

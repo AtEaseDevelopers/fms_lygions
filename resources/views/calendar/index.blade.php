@@ -232,7 +232,7 @@
                                         <div class="mt-1 text-center consignor-info" data-bs-toggle="tooltip"
                                             data-bs-html="true" data-bs-placement="top" title="{{ $tooltip }}">
                                             <span class="badge bg-primary text-dark mb-1">
-                                                {{ number_format($used_capacity, 1) }}/{{ number_format($total_capacity, 1) }}
+                                                {{ number_format($total_capacity - $used_capacity, 1) }}/{{ number_format($total_capacity, 1) }}
                                             </span>
                                             <br>
                                             <span class="badge bg-primary text-dark mb-0">
@@ -301,7 +301,7 @@
                                         <div class="mt-1 text-center consignor-info" data-bs-toggle="tooltip"
                                             data-bs-html="true" data-bs-placement="top" title="{{ $tooltip }}">
                                             <span class="badge bg-primary text-dark mb-1">
-                                                {{ number_format($used_capacity, 1) }}/{{ number_format($total_capacity, 1) }}
+                                                {{ number_format($total_capacity - $used_capacity, 1) }}/{{ number_format($total_capacity, 1) }}
                                             </span>
                                             <br>
                                             <span class="badge bg-primary text-dark mb-0">
@@ -523,15 +523,20 @@
                             <input type="text" id="truckSearch" class="form-control mb-2"
                                 placeholder="Search Truck/Subcon Number...">
 
+                            <div class="mb-1">
+                                <input type="checkbox" id="selectAllTrucks" style="width:1.25em; height:1.25em; cursor:pointer; vertical-align:middle;">
+                                <label for="selectAllTrucks" style="cursor:pointer; vertical-align:middle; font-weight:600;">Select All</label>
+                            </div>
                             <div id="truckCheckboxContainer" class="border rounded p-2"
-                                style="max-height: 220px; overflow-y: auto; background-color: #f8f9fa;">
+                                style="max-height: 220px; overflow-y: auto; background-color: #f8f9fa; display: grid; grid-template-columns: 1fr 1fr;">
                                 @foreach ($trucks_select as $truck)
-                                    <div class="form-check truck-item" data-team="{{ $truck['team'] }}"
+                                    <div class="truck-item" data-team="{{ $truck['team'] }}"
                                         data-number="{{ strtolower($truck['number']) }}"
-                                        style="display:flex; align-items:center; gap:0.5rem;">
-                                        <input class="form-check-input" type="checkbox" name="truck_numbers[]"
-                                            id="truck_{{ $truck['id'] }}" value="{{ $truck['number'] }}">
-                                        <label class="form-check-label mb-0" for="truck_{{ $truck['id'] }}">
+                                        style="display:flex; align-items:center; gap:0.5rem; padding: 2px 4px;">
+                                        <input type="checkbox" name="truck_numbers[]"
+                                            id="truck_{{ $truck['id'] }}" value="{{ $truck['number'] }}"
+                                            style="width:1.25em; height:1.25em; flex-shrink:0; cursor:pointer;">
+                                        <label class="mb-0" for="truck_{{ $truck['id'] }}" style="cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                                             {{ $truck['number'] }}
                                             <span
                                                 class="badge bg-secondary ms-1">{{ ucfirst($truck['source'] ?? 'Truck') }}</span>
@@ -644,14 +649,25 @@
 
     #truckCheckboxContainer .form-check-input {
         flex-shrink: 0;
-        /* Prevent shrinking inside flex */
         width: 1.25em;
         height: 1.25em;
+        float: none !important;
+        position: static !important;
+        margin-left: 0 !important;
+        margin-top: 0 !important;
     }
 
     #truckCheckboxContainer .form-check-label {
         flex-grow: 1;
-        /* Label takes remaining space */
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #truckCheckboxContainer .form-check {
+        padding-left: 0 !important;
+        min-width: 0;
     }
 </style>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -783,19 +799,10 @@
             const checkedBoxes = document.querySelectorAll('.truck-item input[type="checkbox"]:checked');
             selectedCountLabel.textContent = `${checkedBoxes.length} selected`;
 
-            // Add newly checked trucks to selectedTrucks
-            checkedBoxes.forEach(cb => {
-                if (!selectedTrucks.includes(cb.value)) {
-                    selectedTrucks.push(cb.value);
-                }
-            });
-
-            // Remove unchecked trucks from selectedTrucks
-            selectedTrucks.forEach((val, index) => {
-                if (![...checkedBoxes].some(cb => cb.value === val)) {
-                    selectedTrucks.splice(index, 1);
-                }
-            });
+            // Rebuild selectedTrucks from currently checked boxes
+            const checkedValues = [...checkedBoxes].map(cb => cb.value);
+            selectedTrucks.length = 0;
+            checkedValues.forEach(val => selectedTrucks.push(val));
 
             // Build ordered list
             if (selectedTrucks.length > 0) {
@@ -853,6 +860,24 @@
                 updateSelectedCount();
                 updateLabelColors();
             });
+        });
+
+        // Select All
+        const selectAllCheckbox = document.getElementById('selectAllTrucks');
+        selectAllCheckbox.addEventListener('change', function() {
+            const isChecked = this.checked;
+            truckItems.forEach(item => {
+                if (item.style.display !== 'none') {
+                    item.querySelector('input[type="checkbox"]').checked = isChecked;
+                }
+            });
+            updateSelectedCount();
+            updateLabelColors();
+        });
+
+        // Uncheck "Select All" when modal opens
+        document.getElementById('availabilityModal').addEventListener('show.bs.modal', function() {
+            selectAllCheckbox.checked = false;
         });
 
         // Team filter

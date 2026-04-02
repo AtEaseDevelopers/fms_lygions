@@ -315,9 +315,12 @@
                                         @endforeach
                                     </select>
                                 </div>
-                                <div class="col-md-2">
+                                <div class="col-md-2 d-flex gap-1">
                                     <button type="button" class="btn btn-success btn-sm addRow">
                                         <i class="bi bi-plus"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-danger btn-sm removeRow" style="display:none;">
+                                        <i class="bi bi-dash"></i>
                                     </button>
                                 </div>
                             </div>
@@ -342,10 +345,6 @@
             placeholder: "Search or select an option",
             allowClear: true
         });
-    });
-
-    document.getElementById('load_date').addEventListener('change', function() {
-        const loadDate = this.value;
     });
 
     document.querySelectorAll('input[type="date"].date-clickable').forEach(input => {
@@ -465,15 +464,12 @@
                             document.getElementById('pick_truck_size')
                         );
 
-                        // Auto-select pick_truck based on default_truck_type from first location
+                        // Auto-select pick_truck_type based on default_truck_type from first location
                         const firstPickup = data.locations.find(loc => loc.type.toLowerCase() === 'pickup');
-                        const pickTruckSelect = document.querySelector('select[name="pick_truck"]');
-                        if (firstPickup && firstPickup.default_truck_type) {
-                            pickTruckSelect.value = firstPickup.default_truck_type;
-                            pickTruckSelect.dispatchEvent(new Event(
-                                'change')); // Trigger change for truck type filter
-                        } else {
-                            pickTruckSelect.value = "";
+                        const pickTruckTypeSelect = document.getElementById('pick_truck_type');
+                        if (firstPickup && firstPickup.default_truck_type && pickTruckTypeSelect) {
+                            pickTruckTypeSelect.value = firstPickup.default_truck_type;
+                            pickTruckTypeSelect.dispatchEvent(new Event('change'));
                         }
 
                     } else if (type === 'consignee') {
@@ -491,15 +487,12 @@
                             document.getElementById('drop_truck_size')
                         );
 
-                        // Auto-select drop_truck based on default_truck_type from first location
+                        // Auto-select drop_truck_type based on default_truck_type from first location
                         const firstDrop = data.locations.find(loc => loc.type.toLowerCase() === 'dropoff');
-                        const dropTruckSelect = document.querySelector('select[name="drop_truck"]');
-                        if (firstDrop && firstDrop.default_truck_type) {
-                            dropTruckSelect.value = firstDrop.default_truck_type;
-                            dropTruckSelect.dispatchEvent(new Event(
-                                'change')); // Trigger change for truck type filter
-                        } else {
-                            dropTruckSelect.value = "";
+                        const dropTruckTypeSelect = document.getElementById('drop_truck_type');
+                        if (firstDrop && firstDrop.default_truck_type && dropTruckTypeSelect) {
+                            dropTruckTypeSelect.value = firstDrop.default_truck_type;
+                            dropTruckTypeSelect.dispatchEvent(new Event('change'));
                         }
                     }
                 })
@@ -518,11 +511,37 @@
 
     const allTrucks = @json($trucks);
     const allSubcons = @json($subcons);
+    let availableTrucks = allTrucks;
+    let availableSubcons = allSubcons;
 
     function normalize(val) {
         return (val || '').toString().trim().toLowerCase();
     }
 
+    function fetchAvailableTrucks(date) {
+        if (!date) {
+            availableTrucks = allTrucks;
+            availableSubcons = allSubcons;
+            updateTruckNumbers();
+            return;
+        }
+        fetch(`/api/available-trucks?date=${date}`)
+            .then(r => r.json())
+            .then(data => {
+                availableTrucks = data.trucks;
+                availableSubcons = data.subcons;
+                updateTruckNumbers();
+            })
+            .catch(() => {
+                availableTrucks = allTrucks;
+                availableSubcons = allSubcons;
+                updateTruckNumbers();
+            });
+    }
+
+    document.getElementById('load_date').addEventListener('change', function() {
+        fetchAvailableTrucks(this.value);
+    });
 
     function updateTruckNumbers() {
         const pickType = normalize(document.getElementById('pick_truck_type').value);
@@ -530,6 +549,7 @@
         const dropType = normalize(document.getElementById('drop_truck_type').value);
         const dropSize = normalize(document.getElementById('drop_truck_size').value);
 
+        const truckInput = document.getElementById('truck_number');
         const truckDatalist = document.getElementById('truck_list');
         truckDatalist.innerHTML = '';
 
@@ -542,34 +562,43 @@
             let matchPick = true;
             let matchDrop = true;
 
-            if (pickType) {
+            // "all" or empty = no type filter, but still apply size if set
+            if (pickType && pickType !== 'all') {
                 matchPick = tType === pickType;
-                if (matchPick && tSize && pickSize) {
+                if (matchPick && pickSize && tSize) {
                     matchPick = tSize === pickSize;
                 }
+            } else if (pickSize) {
+                matchPick = tSize === pickSize;
             }
 
-            if (dropType) {
+            if (dropType && dropType !== 'all') {
                 matchDrop = tType === dropType;
-                if (matchDrop && tSize && dropSize) {
+                if (matchDrop && dropSize && tSize) {
                     matchDrop = tSize === dropSize;
                 }
+            } else if (dropSize) {
+                matchDrop = tSize === dropSize;
             }
 
-            return matchPick || matchDrop;
+            return matchPick && matchDrop;
         }
 
-        allTrucks.filter(isValid).forEach(t => {
+        availableTrucks.filter(isValid).forEach(t => {
             const opt = document.createElement('option');
             opt.value = t.number;
             truckDatalist.appendChild(opt);
         });
 
-        allSubcons.filter(isValid).forEach(s => {
+        availableSubcons.filter(isValid).forEach(s => {
             const opt = document.createElement('option');
             opt.value = s.truck_no + ' (Subcon)';
             truckDatalist.appendChild(opt);
         });
+
+        // Force browser to refresh datalist by toggling the list attribute
+        truckInput.removeAttribute('list');
+        setTimeout(() => truckInput.setAttribute('list', 'truck_list'), 0);
     }
 
     ['pick_truck_type', 'pick_truck_size', 'drop_truck_type', 'drop_truck_size']
