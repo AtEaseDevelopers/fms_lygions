@@ -1264,6 +1264,35 @@
             }
 
         });
+
+        // Add/Remove inline quantity-unit rows
+        document.addEventListener("click", function(e) {
+            const addBtn = e.target.closest(".addInlineQtyRow");
+            if (addBtn) {
+                const container = addBtn.closest(".inline-qty-unit-container");
+                const row = addBtn.closest(".inline-qty-unit-row");
+                const clone = row.cloneNode(true);
+                clone.querySelectorAll("input").forEach(input => input.value = "");
+                clone.querySelectorAll("select").forEach(select => select.selectedIndex = 0);
+                container.appendChild(clone);
+                container.querySelectorAll(".removeInlineQtyRow").forEach(btn => btn.style.display = "");
+            }
+
+            const removeBtn = e.target.closest(".removeInlineQtyRow");
+            if (removeBtn) {
+                const row = removeBtn.closest(".inline-qty-unit-row");
+                const container = row.closest(".inline-qty-unit-container");
+                const rows = container.querySelectorAll(".inline-qty-unit-row");
+                if (rows.length > 1) {
+                    row.remove();
+                    const remaining = container.querySelectorAll(".inline-qty-unit-row");
+                    if (remaining.length === 1) {
+                        remaining[0].querySelector(".removeInlineQtyRow").style.display = "none";
+                    }
+                }
+            }
+        });
+
         // Add Inline Row functionality
         const addInlineRowBtn = document.getElementById('addInlineRowBtn');
         const tableBody = document.querySelector('table.table tbody');
@@ -1341,6 +1370,8 @@
                         <select class="form-select form-select-sm" name="unit[]" style="width:120px">
                             ${buildUnitsOptions(unitValues[i] || '')}
                         </select>
+                        <button type="button" class="btn btn-success btn-sm addInlineQtyRow"><i class="bi bi-plus"></i></button>
+                        <button type="button" class="btn btn-danger btn-sm removeInlineQtyRow" ${pairCount <= 1 ? 'style="display:none;"' : ''}><i class="bi bi-dash"></i></button>
                     </div>`;
             }
 
@@ -1700,6 +1731,8 @@
                     <select class="form-select form-select-sm" name="unit[]" style="width:120px">
                         ${unitsOptions}
                     </select>
+                    <button type="button" class="btn btn-success btn-sm addInlineQtyRow"><i class="bi bi-plus"></i></button>
+                    <button type="button" class="btn btn-danger btn-sm removeInlineQtyRow" style="display:none;"><i class="bi bi-dash"></i></button>
                 </div>
             </div>
         </td>
