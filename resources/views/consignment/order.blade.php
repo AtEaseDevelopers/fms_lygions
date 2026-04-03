@@ -36,7 +36,7 @@
             ->values()
             ->toArray();
 
-        $truckGroups = Truck::select('chassis_type')->distinct()->pluck('chassis_type')->filter()->values()->toArray();
+        $truckGroups = Truck::where('is_outsider', false)->select('chassis_type')->distinct()->pluck('chassis_type')->filter()->values()->toArray();
 
         $units = Unit::all();
     @endphp
@@ -1375,12 +1375,12 @@
                     </div>`;
             }
 
-            let truckGroupsOptions = '<option value="">-</option><option value="all"' + (pickTruckType === 'all' ? ' selected' : '') + '>ALL</option>';
+            let truckGroupsOptions = '<option value="">-</option><option value="any"' + (pickTruckType === 'any' ? ' selected' : '') + '>Any</option>';
             if (TRUCK_GROUPS && Array.isArray(TRUCK_GROUPS)) {
                 truckGroupsOptions += TRUCK_GROUPS.map(g => `<option value="${g}"${g === pickTruckType ? ' selected' : ''}>${g}</option>`).join('');
             }
 
-            let dropTruckGroupsOptions = '<option value="">-</option><option value="all"' + (dropTruckType === 'all' ? ' selected' : '') + '>ALL</option>';
+            let dropTruckGroupsOptions = '<option value="">-</option><option value="any"' + (dropTruckType === 'any' ? ' selected' : '') + '>Any</option>';
             if (TRUCK_GROUPS && Array.isArray(TRUCK_GROUPS)) {
                 dropTruckGroupsOptions += TRUCK_GROUPS.map(g => `<option value="${g}"${g === dropTruckType ? ' selected' : ''}>${g}</option>`).join('');
             }
@@ -1632,7 +1632,7 @@
             }
 
             // Build truck groups options
-            let truckGroupsOptions = '<option value="">-</option><option value="all">ALL</option>';
+            let truckGroupsOptions = '<option value="">-</option><option value="any">Any</option>';
             if (TRUCK_GROUPS && Array.isArray(TRUCK_GROUPS)) {
                 truckGroupsOptions += TRUCK_GROUPS.map(g => `<option value="${g}">${g}</option>`).join(
                     '');

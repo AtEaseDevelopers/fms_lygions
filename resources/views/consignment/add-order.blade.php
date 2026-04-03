@@ -35,7 +35,7 @@
     use App\Models\Unit;
     use App\Models\Subcon;
 
-    $truckGroups = Truck::select('chassis_type')->distinct()->pluck('chassis_type')->filter()->values()->toArray();
+    $truckGroups = Truck::where('is_outsider', false)->select('chassis_type')->distinct()->pluck('chassis_type')->filter()->values()->toArray();
 
     $trucks = Truck::select('number', 'chassis_type', 'size')->get();
     $subcons = Subcon::select('truck_no', 'chassis_type', 'size')->get();
@@ -228,7 +228,7 @@
                         <label class="form-label fw-bold">Pick Truck Type</label>
                         <select class="form-select" name="pick_truck_type" id="pick_truck_type">
                             <option value="">-- Select Type --</option>
-                            <option value="all">ALL</option>
+                            <option value="any">Any</option>
                             @foreach ($truckGroups as $group)
                                 <option value="{{ $group }}">{{ $group }}</option>
                             @endforeach
@@ -239,7 +239,7 @@
                         <label class="form-label fw-bold">Drop Truck Type</label>
                         <select class="form-select" name="drop_truck_type" id="drop_truck_type">
                             <option value="">-- Select Type --</option>
-                            <option value="all">ALL</option>
+                            <option value="any">Any</option>
                             @foreach ($truckGroups as $group)
                                 <option value="{{ $group }}">{{ $group }}</option>
                             @endforeach
@@ -562,15 +562,15 @@
             let matchPick = true;
             let matchDrop = true;
 
-            // "all" or empty = no type filter; "any" or empty = no size filter
-            if (pickType && pickType !== 'all') {
+            // "any" or empty = no type filter; "any" or empty = no size filter
+            if (pickType && pickType !== 'any') {
                 matchPick = tType === pickType;
             }
             if (matchPick && pickSize && pickSize !== 'any' && tSize) {
                 matchPick = tSize === pickSize;
             }
 
-            if (dropType && dropType !== 'all') {
+            if (dropType && dropType !== 'any') {
                 matchDrop = tType === dropType;
             }
             if (matchDrop && dropSize && dropSize !== 'any' && tSize) {
