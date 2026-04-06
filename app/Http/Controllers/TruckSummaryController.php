@@ -20,12 +20,13 @@ class TruckSummaryController extends Controller
         $selectedDate = $request->get('date', now()->format('Y-m-d'));
 
         $trucks = Truck::select('id', 'number', 'group', 'floor_space')
+            ->where('is_outsider', 0)
             ->when($selectedGroup, function ($query, $selectedGroup) {
                 $query->where('group', $selectedGroup);
             })
             ->get();
 
-        $trucks_grp = Truck::pluck('group')->unique()->values();
+        $trucks_grp = Truck::where('is_outsider', 0)->pluck('group')->unique()->values();
         // Get unit spaces for conversion
         $unitSpaces = Unit::pluck('space', 'unit')->toArray();
 
