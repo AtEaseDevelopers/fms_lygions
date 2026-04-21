@@ -260,8 +260,6 @@
                                         </a>
                                     </th>
                                     <th class="sticky-col">Drop Point</th>
-                                    <th>Pick Address</th>
-                                    <th>Drop Address</th>
                                     <th><span class="d-inline-block" style="white-space: normal;">Pick Truck Size</span></th>
                                     <th><span class="d-inline-block" style="white-space: normal;">Drop Truck Size</span></th>
                                     <th><span class="d-inline-block" style="white-space: normal;">Pick Truck Type</span></th>
@@ -406,8 +404,6 @@
                                             {!! nl2br(e(wordwrap($consigneeDisplay, 20, "\n", true))) !!}
                                         </td>
                                         <td class="sticky-col">{{ $order['drop_point'] ?? '-' }}</td>
-                                        <td>{{ $order['pick_address'] ?? '-' }}</td>
-                                        <td>{{ $order['drop_address'] ?? '-' }}</td>
                                         <td>{{ $order['pick_truck_size'] ?? '-' }}</td>
                                         <td>{{ $order['drop_truck_size'] ?? '-' }}</td>
                                         <td>{{ $order['pick_truck_type'] ?? '-' }}</td>
@@ -537,7 +533,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="23" class="text-center">No consignment orders found.</td>
+                                        <td colspan="21" class="text-center">No consignment orders found.</td>
                                     </tr>
                                 @endforelse
                             </tbody>
@@ -1444,12 +1440,8 @@
                 </td>
                 <td class="sticky-col">
                     <input type="text" class="form-control form-control-sm" name="drop_point" placeholder="Drop Point" value="${escapeAttr(dropPoint)}" required>
-                </td>
-                <td>
-                    <input type="text" class="form-control form-control-sm" name="pick_address" placeholder="Pick Address" value="${escapeAttr(pickAddress)}">
-                </td>
-                <td>
-                    <input type="text" class="form-control form-control-sm" name="drop_address" placeholder="Drop Address" value="${escapeAttr(dropAddress)}">
+                    <input type="hidden" name="pick_address" value="${escapeAttr(pickAddress)}">
+                    <input type="hidden" name="drop_address" value="${escapeAttr(dropAddress)}">
                 </td>
                 <td>
                     <select class="form-select form-select-sm" name="pick_truck_size">
@@ -1690,12 +1682,8 @@
         </td>
         <td class="sticky-col">
             <input type="text" class="form-control form-control-sm" name="drop_point" placeholder="Drop Point" required>
-        </td>
-        <td>
-            <input type="text" class="form-control form-control-sm" name="pick_address" placeholder="Pick Address">
-        </td>
-        <td>
-            <input type="text" class="form-control form-control-sm" name="drop_address" placeholder="Drop Address">
+            <input type="hidden" name="pick_address">
+            <input type="hidden" name="drop_address">
         </td>
         <td>
             <select class="form-select form-select-sm" name="pick_truck_size">
