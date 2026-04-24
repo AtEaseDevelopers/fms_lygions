@@ -1519,6 +1519,19 @@
                 });
             }
 
+            // Re-run filter when pick/drop size or type changes
+            ['pick_truck_size', 'drop_truck_size', 'pick_truck_type', 'drop_truck_type']
+                .forEach(name => {
+                    const el = row.querySelector(`[name="${name}"]`);
+                    if (el) {
+                        el.addEventListener('change', function() {
+                            const currentDate = row.querySelector('[name="load_date"]')?.value || '';
+                            const currentTruck = row.querySelector('[name="truck_number"]')?.value || '';
+                            populateInlineTruckSelect(row, currentDate, currentTruck);
+                        });
+                    }
+                });
+
             return row;
         }
 
@@ -1526,10 +1539,40 @@
             const select = row.querySelector('[name="truck_number"]');
             if (!select) return;
 
+            const normalize = v => (v || '').toString().trim().toLowerCase();
+            const pickType = normalize(row.querySelector('[name="pick_truck_type"]')?.value);
+            const pickSize = normalize(row.querySelector('[name="pick_truck_size"]')?.value);
+            const dropType = normalize(row.querySelector('[name="drop_truck_type"]')?.value);
+            const dropSize = normalize(row.querySelector('[name="drop_truck_size"]')?.value);
+
+            function isValid(t) {
+                const tType = normalize(t.chassis_type);
+                const tSize = normalize(t.size);
+
+                let matchPick = true;
+                let matchDrop = true;
+
+                if (pickType && pickType !== 'any') {
+                    matchPick = tType === pickType;
+                }
+                if (matchPick && pickSize && pickSize !== 'any' && tSize) {
+                    matchPick = tSize === pickSize;
+                }
+
+                if (dropType && dropType !== 'any') {
+                    matchDrop = tType === dropType;
+                }
+                if (matchDrop && dropSize && dropSize !== 'any' && tSize) {
+                    matchDrop = tSize === dropSize;
+                }
+
+                return matchPick && matchDrop;
+            }
+
             function fillOptions(trucks, subcons) {
                 select.innerHTML = '<option value="">-</option>';
                 if (trucks && Array.isArray(trucks)) {
-                    trucks.forEach(t => {
+                    trucks.filter(isValid).forEach(t => {
                         const opt = document.createElement('option');
                         opt.value = t.number;
                         opt.textContent = t.number;
@@ -1537,7 +1580,7 @@
                         select.appendChild(opt);
                     });
                 }
-                // Ensure currently assigned truck stays in list
+                // Ensure currently assigned truck stays in list even if it no longer matches
                 if (selectedTruck && !select.querySelector(`option[value="${selectedTruck}"]`)) {
                     const opt = document.createElement('option');
                     opt.value = selectedTruck;
@@ -1546,7 +1589,7 @@
                     select.insertBefore(opt, select.options[1] || null);
                 }
                 if (subcons && Array.isArray(subcons)) {
-                    subcons.forEach(s => {
+                    subcons.filter(isValid).forEach(s => {
                         const opt = document.createElement('option');
                         opt.value = s.truck_no;
                         opt.textContent = s.truck_no + ' (Subcon)';
@@ -1771,6 +1814,19 @@
                     populateInlineTruckSelect(newRow, this.value, currentTruck);
                 });
             }
+
+            // Re-run filter when pick/drop size or type changes
+            ['pick_truck_size', 'drop_truck_size', 'pick_truck_type', 'drop_truck_type']
+                .forEach(name => {
+                    const el = newRow.querySelector(`[name="${name}"]`);
+                    if (el) {
+                        el.addEventListener('change', function() {
+                            const currentDate = newRow.querySelector('[name="load_date"]')?.value || '';
+                            const currentTruck = newRow.querySelector('[name="truck_number"]')?.value || '';
+                            populateInlineTruckSelect(newRow, currentDate, currentTruck);
+                        });
+                    }
+                });
 
             // Recalculate sticky column positions
             recalculateStickyColumns();
