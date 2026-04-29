@@ -12,8 +12,13 @@ use App\Models\Unit;
 use App\Models\DraftCustomer;
 use App\Models\Subcon;
 use App\Models\Availability;
+use App\Models\Notification;
+use App\Models\TemporaryTruck;
+use App\Traits\HandlesExpressModeSwap;
 class ConsignmentController extends Controller
 {
+    use HandlesExpressModeSwap;
+
     /**
      * Display a listing of the resource.
      */
@@ -136,7 +141,16 @@ class ConsignmentController extends Controller
         });
 
         $customers = Customer::all();
-        return view('consignment.order', compact('customers', 'consignments', 'trucks_no', 'trucks_grp'));
+
+        $affectedIds = Notification::whereNull('read_at')
+            ->where('type', 'express_swap_unassigned')
+            ->whereIn('consignment_id', $consignments->pluck('id'))
+            ->pluck('consignment_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        return view('consignment.order', compact('customers', 'consignments', 'trucks_no', 'trucks_grp', 'affectedIds'));
     }
 
     private function getTrucksWithCapacity(string $date)
@@ -213,6 +227,8 @@ class ConsignmentController extends Controller
         $subcons = Subcon::select('id', 'truck_no', 'chassis_type', 'size')->get()
             ->filter(fn($s) => $availableSubconIds->contains($s->id));
 
+        $tempTrucks = TemporaryTruck::where('date', $date)->with('subcon')->get();
+
         return response()->json([
             'trucks' => $available->map(fn($t) => [
                 'number' => $t->number,
@@ -225,6 +241,14 @@ class ConsignmentController extends Controller
                 'truck_no' => $s->truck_no,
                 'chassis_type' => $s->chassis_type,
                 'size' => $s->size,
+            ])->values(),
+            'temp_trucks' => $tempTrucks->map(fn($t) => [
+                'truck_no' => $t->label,
+                'chassis_type' => $t->chassis_type,
+                'size' => $t->size,
+                'location' => $t->location,
+                'subcon_id' => $t->subcon_id,
+                'subcon_truck_no' => optional($t->subcon)->truck_no,
             ])->values(),
         ]);
     }
@@ -382,62 +406,24 @@ class ConsignmentController extends Controller
             'express_mode' => (bool) $request->input('express_mode'),
         ]);
 
-        if ($request->has('express_mode')) {
+        $affected = $this->applyExpressSwap($consignment)['affected'];
 
-            $loadDate = Carbon::parse($request->load_date);
-            $currentDate = $loadDate->copy()->addDay(); // start updating from next day
+        $swal = $affected->isEmpty()
+            ? [
+                'icon' => 'success',
+                'title' => 'Created!',
+                'text' => 'Consignment order created successfully.',
+            ]
+            : [
+                'icon' => 'warning',
+                'title' => 'Created with side-effects',
+                'text' => sprintf(
+                    'Express order saved. %d existing planning(s) were unassigned. See dashboard alerts.',
+                    $affected->count()
+                ),
+            ];
 
-            $nextLocation = (strtoupper($request->pick_point) === 'Singapore') ? 'SG' : 'MY';
-
-            $truckId = null;
-            $subconId = null;
-
-            if ($request->truck_number) {
-                $truckId = Truck::where('number', $request->truck_number)->value('id');
-            }
-
-            if (!$truckId && $request->pick_truck) {
-                $subconId = Subcon::where('truck_no', $request->pick_truck)->value('id');
-            }
-
-
-            if ($truckId || $subconId) {
-
-                while (true) {
-                    $query = Availability::query()
-                        ->whereDate('date', $currentDate->toDateString());
-
-                    if ($truckId) {
-                        $query->where('truck_id', $truckId);
-                    } else {
-                        $query->where('subcon_id', $subconId);
-                    }
-
-                    $availability = $query->first();
-
-                    // STOP IF no record or not "available"
-                    if (!$availability || strtolower($availability->status) !== 'available') {
-                        break;
-                    }
-
-                    // update only location
-                    $availability->update([
-                        'location' => $availability->location === 'SG' ? 'MY' : 'SG'
-                    ]);
-
-                    // move to next day
-                    $currentDate->addDay();
-                }
-            }
-        }
-
-
-
-        return redirect()->back()->with('swal', [
-            'icon' => 'success',
-            'title' => 'Created!',
-            'text' => 'Consignment order created successfully.'
-        ]);
+        return redirect()->back()->with('swal', $swal);
     }
 
     public function storeInline(Request $request)
@@ -462,6 +448,8 @@ class ConsignmentController extends Controller
             'remarks' => 'nullable|string',
             'pre_pick' => 'nullable|string',
             'billing_remark' => 'nullable|string',
+            'pick_address' => 'nullable|string',
+            'drop_address' => 'nullable|string',
         ]);
 
         $date = Carbon::now('Asia/Kuala_Lumpur');
@@ -504,44 +492,23 @@ class ConsignmentController extends Controller
             'express_mode' => (bool) $request->input('express_mode'),
         ]);
 
-        // Express mode logic (same as your store method)
-        if ($request->has('express_mode')) {
-            $loadDate = Carbon::parse($request->load_date);
-            $currentDate = $loadDate->copy()->addDay();
-            $nextLocation = (strtoupper($request->pick_point) === 'Singapore') ? 'SG' : 'MY';
-            $truckId = null;
-            $subconId = null;
-
-            if ($request->truck_number) {
-                $truckId = Truck::where('number', $request->truck_number)->value('id');
-            }
-
-            if (!$truckId && $request->pick_truck) {
-                $subconId = Subcon::where('truck_no', $request->pick_truck)->value('id');
-            }
-
-            if ($truckId || $subconId) {
-                while (true) {
-                    $query = Availability::query()->whereDate('date', $currentDate->toDateString());
-                    if ($truckId) {
-                        $query->where('truck_id', $truckId);
-                    } else {
-                        $query->where('subcon_id', $subconId);
-                    }
-                    $availability = $query->first();
-                    if (!$availability || strtolower($availability->status) !== 'available') {
-                        break;
-                    }
-                    $availability->update(['location' => $availability->location === 'SG' ? 'MY' : 'SG']);
-                    $currentDate->addDay();
-                }
-            }
-        }
+        $affected = $this->applyExpressSwap($consignment)['affected'];
 
         return response()->json([
             'success' => true,
-            'message' => 'Consignment order created successfully.',
-            'consignment' => $consignment
+            'message' => $affected->isEmpty()
+                ? 'Consignment order created successfully.'
+                : sprintf(
+                    'Express order saved. %d existing planning(s) were unassigned. See dashboard alerts.',
+                    $affected->count()
+                ),
+            'consignment' => $consignment,
+            'affected_count' => $affected->count(),
+            'affected' => $affected->map(fn($c) => [
+                'id' => $c->id,
+                'consignment_no' => $c->consignment_no,
+                'load_date' => $c->load_date,
+            ])->values(),
         ]);
     }
 
@@ -570,6 +537,7 @@ class ConsignmentController extends Controller
     public function update(Request $request, $id)
     {
         $consignment = Consignment::findOrFail($id);
+        $wasExpress = (bool) $consignment->express_mode;
 
         $data = $request->all();
 
@@ -584,16 +552,33 @@ class ConsignmentController extends Controller
 
         $consignment->update($data);
 
-        return redirect()->back()->with('swal', [
-            'icon' => 'success',
-            'title' => 'Updated!',
-            'text' => 'Order updated successfully.'
-        ]);
+        $affected = collect();
+        if (!$wasExpress && (bool) $consignment->express_mode) {
+            $affected = $this->applyExpressSwap($consignment->fresh())['affected'];
+        }
+
+        $swal = $affected->isEmpty()
+            ? [
+                'icon' => 'success',
+                'title' => 'Updated!',
+                'text' => 'Order updated successfully.',
+            ]
+            : [
+                'icon' => 'warning',
+                'title' => 'Updated with side-effects',
+                'text' => sprintf(
+                    'Express mode enabled. %d existing planning(s) were unassigned. See dashboard alerts.',
+                    $affected->count()
+                ),
+            ];
+
+        return redirect()->back()->with('swal', $swal);
     }
 
     public function updateInline(Request $request, $id)
     {
         $consignment = Consignment::findOrFail($id);
+        $wasExpress = (bool) $consignment->express_mode;
 
         $request->validate([
             'load_date' => 'required|date',
@@ -645,9 +630,25 @@ class ConsignmentController extends Controller
             'express_mode' => (bool) $request->input('express_mode'),
         ]);
 
+        $affected = collect();
+        if (!$wasExpress && (bool) $consignment->express_mode) {
+            $affected = $this->applyExpressSwap($consignment->fresh())['affected'];
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'Order updated successfully.',
+            'message' => $affected->isEmpty()
+                ? 'Order updated successfully.'
+                : sprintf(
+                    'Express mode enabled. %d existing planning(s) were unassigned. See dashboard alerts.',
+                    $affected->count()
+                ),
+            'affected_count' => $affected->count(),
+            'affected' => $affected->map(fn($c) => [
+                'id' => $c->id,
+                'consignment_no' => $c->consignment_no,
+                'load_date' => $c->load_date,
+            ])->values(),
         ]);
     }
 

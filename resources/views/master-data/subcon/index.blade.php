@@ -214,11 +214,11 @@
                                                                         <option value="" disabled
                                                                             {{ $subcon->team == null ? 'selected' : '' }}>
                                                                             -- Select Team --</option>
-                                                                        <option value="A"
-                                                                            {{ $subcon->team == 'A' ? 'selected' : '' }}>A
+                                                                        <option value="MY"
+                                                                            {{ $subcon->team == 'MY' ? 'selected' : '' }}>MY Team
                                                                         </option>
-                                                                        <option value="B"
-                                                                            {{ $subcon->team == 'B' ? 'selected' : '' }}>B
+                                                                        <option value="SG"
+                                                                            {{ $subcon->team == 'SG' ? 'selected' : '' }}>SG Team
                                                                         </option>
                                                                     </select>
                                                                 </div>

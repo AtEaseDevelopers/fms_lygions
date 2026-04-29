@@ -125,6 +125,14 @@
         <div class="table-responsive">
             <table class="table text-left table-bordered " style="table-layout: fixed;">
                 <thead>
+                    <tr class="text-center small">
+                        <th colspan="2"></th>
+                        @foreach ($dates as $date)
+                            <th class="text-muted fw-normal">
+                                {{ number_format($date['MY']['balance'] ?? 0, 1) }}
+                            </th>
+                        @endforeach
+                    </tr>
                     <tr class="text-center">
                         <th rowspan="2">Truck Num</th>
                         <th rowspan="2">
@@ -338,103 +346,271 @@
 
             </table>
 
-            <div class="container mt-4">
-                <div class="row g-3 justify-content-center">
+        </div>
 
-                    <!-- MY Total Capacity -->
-                    <div class="col-12 col-md-2">
-                        <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
-                            style="background-color: #ffffff;">
-                            <div>
-                                <div class="fw-bold fs-4 text-dark">{{ number_format($totalMyCapacity, 1) }}</div>
-                                <div class="small">MY Total Capacity</div>
-                            </div>
-                            <i class="bi bi-truck fs-2 position-absolute top-0 end-0 m-2" style="color: #f7c6c7;"></i>
-                        </div>
-                    </div>
-
-                    <!-- MY Used -->
-                    <div class="col-12 col-md-2">
-                        <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
-                            style="background-color: #ffffff">
-                            <div>
-                                <div class="fw-bold fs-4">{{ number_format($totalMyCapacity - $totalMyUsed, 1) }}</div>
-                                <div class="small">MY Unused</div>
-                            </div>
-                            <i class="bi bi-speedometer2 fs-2 position-absolute top-0 end-0 m-2"
-                                style="color: #f7c6c7;"></i>
-                        </div>
-                    </div>
-
-                    <!-- MY Utilization -->
-                    <div class="col-12 col-md-2">
-                        @php
-                            $myUtilizationColor = match (true) {
-                                $myUtilization < 30 => 'text-danger',
-                                $myUtilization < 70 => 'text-warning',
-                                default => 'text-success',
-                            };
-                        @endphp
-                        <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
-                            style="background-color: #ffffff;">
-                            <div>
-                                <div class="fw-bold fs-4 {{ $myUtilizationColor }}">
-                                    {{ number_format($myUtilization, 2) }}%</div>
-                                <div class="small">MY Utilization</div>
-                            </div>
-                            <i class="bi bi-percent fs-2 position-absolute top-0 end-0 m-2" style="color: #f7c6c7;"></i>
-                        </div>
-                    </div>
-
-                    <!-- SG Total Capacity -->
-                    {{-- <div class="col-12 col-md-2">
-                        <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
-                            style="background-color: #ffffff;">
-                            <div>
-                                <div class="fw-bold fs-4 text-dark">{{ number_format($totalSgCapacity, 1) }}</div>
-                                <div class="small">SG Total Capacity</div>
-                            </div>
-                            <i class="bi bi-truck fs-2 position-absolute top-0 end-0 m-2" style="color: #ace5ef"></i>
-                        </div>
-                    </div> --}}
-
-                    <!-- SG Used -->
-                    {{-- <div class="col-12 col-md-2">
-                        <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
-                            style="background-color: #ffffff;">
-                            <div>
-                                <div class="fw-bold fs-4">{{ number_format($totalSgUsed, 1) }}</div>
-                                <div class="small">SG Used</div>
-                            </div>
-                            <i class="bi bi-speedometer2 fs-2 position-absolute top-0 end-0 m-2 "
-                                style="color: #ace5ef"></i>
-                        </div>
-                    </div> --}}
-
-                    <!-- SG Utilization -->
-                    {{-- <div class="col-12 col-md-2">
-                        @php
-                            $sgUtilizationColor = match (true) {
-                                $sgUtilization > 70 => 'text-danger',
-                                $sgUtilization > 30 => 'text-warning',
-                                default => 'text-success',
-                            };
-                        @endphp
-                        <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
-                            style="background-color: #ffffff;">
-                            <div>
-                                <div class="fw-bold fs-4 {{ $sgUtilizationColor }}">
-                                    {{ number_format($sgUtilization, 2) }}%</div>
-                                <div class="small">SG Utilization</div>
-                            </div>
-                            <i class="bi bi-percent fs-2 position-absolute top-0 end-0 m-2" style="color: #ace5ef"></i>
-                        </div>
-                    </div> --}}
-
-                </div>
+        {{-- Subcon Capacity (Temporary Trucks) --}}
+        <div class="mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0 fw-bold">Subcon Capacity (Temporary Trucks)</h5>
+                <small class="text-muted">Add temporary subcons via the <em>Create New Availability</em> form above.</small>
             </div>
 
+            <div class="table-responsive">
+                <table class="table text-left table-bordered" style="table-layout: fixed;">
+                    <thead>
+                        <tr class="text-center small">
+                            <th colspan="3"></th>
+                            @foreach ($dates as $date)
+                                @php
+                                    $tdHeaderKey = \Carbon\Carbon::parse($date['date'])->format('Y-m-d');
+                                    $tdHeaderUsed = (float) ($tempDateMatrix[$tdHeaderKey]['used_capacity'] ?? 0);
+                                @endphp
+                                <th class="text-muted fw-normal">{{ number_format($tdHeaderUsed, 1) }}</th>
+                            @endforeach
+                        </tr>
+                        <tr class="text-center">
+                            <th style="width: 80px;">Loc.</th>
+                            <th style="width: 100px;">Type</th>
+                            <th style="width: 80px;">Size</th>
+                            @foreach ($dates as $date)
+                                @php
+                                    $tdKey = \Carbon\Carbon::parse($date['date'])->format('Y-m-d');
+                                    $td = $tempDateMatrix[$tdKey] ?? ['total_capacity' => 0, 'used_capacity' => 0];
+                                    $tdTotal = (float) ($td['total_capacity'] ?? 0);
+                                    $tdUsed = (float) ($td['used_capacity'] ?? 0);
+                                    $tdRemaining = max(0, $tdTotal - $tdUsed);
+                                    $tdRate = $tdTotal > 0 ? ($tdUsed / $tdTotal) * 100 : 0;
+                                    $tdColor =
+                                        $tdRate > 70
+                                            ? 'text-danger fw-bold'
+                                            : ($tdRate > 30
+                                                ? 'text-warning fw-bold'
+                                                : 'text-success fw-bold');
+                                @endphp
+                                <th>
+                                    <div>
+                                        <span class="{{ $tdColor }}">
+                                            {{ number_format($tdRemaining, 1) }}<span style="color: black"> /
+                                                {{ number_format($tdTotal, 1) }}</span>
+                                        </span>
+                                    </div>
+                                    <div><strong>{{ \Carbon\Carbon::parse($date['date'])->format('D') }}</strong></div>
+                                    <div>{{ \Carbon\Carbon::parse($date['date'])->format('j/n') }}</div>
+                                </th>
+                            @endforeach
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (empty($tempMatrix))
+                            <tr>
+                                <td colspan="{{ count($dates) + 3 }}" class="text-center py-4 text-muted">
+                                    No temporary subcon trucks for this date range.
+                                </td>
+                            </tr>
+                        @else
+                            @foreach ($tempMatrix as $label => $byLocation)
+                                @foreach ($byLocation as $loc => $entry)
+                                    <tr>
+                                        <td class="align-middle"><strong>{{ $loc }}</strong></td>
+                                        <td class="align-middle">{{ $entry['meta']['chassis_type'] }}</td>
+                                        <td class="align-middle">{{ $entry['meta']['size'] }}</td>
+                                        @foreach ($dates as $date)
+                                            @php
+                                                $dateOnly = \Carbon\Carbon::parse($date['date'])->format('Y-m-d');
+                                                $cell = $entry['cells'][$dateOnly] ?? null;
+                                                $hasCell = (bool) $cell;
+                                                $cellId = $cell['id'] ?? null;
+                                                $count = $cell['consignment_count'] ?? 0;
+                                                $consignors = $cell['consignors'] ?? collect();
+                                                $cellSubconName = $cell['subcon_name'] ?? null;
+                                                $hasSubcon = !empty($cell['subcon_id']);
 
+                                                if ($hasCell) {
+                                                    $bg = $loc === 'SG'
+                                                        ? ($count > 0 ? '#d1ecf1' : '#ffffff')
+                                                        : ($count > 0 ? '#f7c6c7' : '#ffffff');
+                                                } else {
+                                                    $bg = '#c3c2c2';
+                                                }
+                                            @endphp
+                                            <td class="p-2 temp-truck-cell"
+                                                style="background-color: {{ $bg }};"
+                                                data-temp-id="{{ $cellId }}"
+                                                data-has-cell="{{ $hasCell ? 'true' : 'false' }}">
+                                                @if ($hasCell)
+                                                    @if ($count > 0)
+                                                        @php
+                                                            $tempTooltip = '';
+                                                            if ($consignors->isNotEmpty()) {
+                                                                $tempTooltip .= '<ul class="mb-0 ps-3">';
+                                                                foreach ($consignors as $cn) {
+                                                                    $tempTooltip .= '<li>' . e($cn) . '</li>';
+                                                                }
+                                                                $tempTooltip .= '</ul>';
+                                                            }
+                                                        @endphp
+                                                        <span class="badge bg-primary text-dark consignor-info"
+                                                            data-bs-toggle="tooltip" data-bs-html="true"
+                                                            data-bs-placement="top" title="{{ $tempTooltip }}">
+                                                            {{ $count }} consignor{{ $count > 1 ? 's' : '' }}
+                                                        </span>
+                                                    @endif
+                                                    @if ($hasSubcon)
+                                                        <div class="mt-1 small">
+                                                            <span class="badge bg-success">Subcon</span>
+                                                            <span class="text-muted">{{ $cellSubconName }}</span>
+                                                        </div>
+                                                    @endif
+                                                @endif
+                                            </td>
+                                        @endforeach
+                                    </tr>
+                                @endforeach
+                            @endforeach
+                        @endif
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="container mt-4">
+            <div class="row g-3 justify-content-center">
+
+                <!-- Truck Total -->
+                <div class="col-12 col-md-2">
+                    <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
+                        style="background-color: #ffffff;">
+                        <div>
+                            <div class="fw-bold fs-4 text-dark">{{ number_format($totalMyCapacity, 1) }}</div>
+                            <div class="small">Truck Total</div>
+                        </div>
+                        <i class="bi bi-truck fs-2 position-absolute top-0 end-0 m-2" style="color: #f7c6c7;"></i>
+                    </div>
+                </div>
+
+                <!-- Truck Unused -->
+                <div class="col-12 col-md-2">
+                    <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
+                        style="background-color: #ffffff">
+                        <div>
+                            <div class="fw-bold fs-4">{{ number_format($totalMyCapacity - $totalMyUsed, 1) }}</div>
+                            <div class="small">Truck Unused</div>
+                        </div>
+                        <i class="bi bi-speedometer2 fs-2 position-absolute top-0 end-0 m-2"
+                            style="color: #f7c6c7;"></i>
+                    </div>
+                </div>
+
+                <!-- Truck Utilization -->
+                <div class="col-12 col-md-2">
+                    @php
+                        $myUtilizationColor = match (true) {
+                            $myUtilization < 30 => 'text-danger',
+                            $myUtilization < 70 => 'text-warning',
+                            default => 'text-success',
+                        };
+                    @endphp
+                    <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
+                        style="background-color: #ffffff;">
+                        <div>
+                            <div class="fw-bold fs-4 {{ $myUtilizationColor }}">
+                                {{ number_format($myUtilization, 2) }}%</div>
+                            <div class="small">Truck Utilization</div>
+                        </div>
+                        <i class="bi bi-percent fs-2 position-absolute top-0 end-0 m-2" style="color: #f7c6c7;"></i>
+                    </div>
+                </div>
+
+                <!-- Temp Subcon Total Capacity -->
+                <div class="col-12 col-md-2">
+                    <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
+                        style="background-color: #ffffff;">
+                        <div>
+                            <div class="fw-bold fs-4 text-dark">{{ number_format($tempTotalMy, 1) }}</div>
+                            <div class="small">Temp Subcon Total</div>
+                        </div>
+                        <i class="bi bi-truck fs-2 position-absolute top-0 end-0 m-2" style="color: #c7e8b8;"></i>
+                    </div>
+                </div>
+
+                <!-- Temp Subcon Unused -->
+                <div class="col-12 col-md-2">
+                    <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
+                        style="background-color: #ffffff">
+                        <div>
+                            <div class="fw-bold fs-4">{{ number_format(max(0, $tempTotalMy - $tempUsedMy), 1) }}</div>
+                            <div class="small">Temp Subcon Unused</div>
+                        </div>
+                        <i class="bi bi-speedometer2 fs-2 position-absolute top-0 end-0 m-2"
+                            style="color: #c7e8b8;"></i>
+                    </div>
+                </div>
+
+                <!-- Temp Subcon Utilization -->
+                <div class="col-12 col-md-2">
+                    @php
+                        $tempUtilColor = match (true) {
+                            $tempUtilizationMy < 30 => 'text-success',
+                            $tempUtilizationMy < 70 => 'text-warning',
+                            default => 'text-danger',
+                        };
+                    @endphp
+                    <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
+                        style="background-color: #ffffff;">
+                        <div>
+                            <div class="fw-bold fs-4 {{ $tempUtilColor }}">
+                                {{ number_format($tempUtilizationMy, 2) }}%</div>
+                            <div class="small">Temp Subcon Utilization</div>
+                        </div>
+                        <i class="bi bi-percent fs-2 position-absolute top-0 end-0 m-2" style="color: #c7e8b8;"></i>
+                    </div>
+                </div>
+
+                <!-- Combined Total -->
+                <div class="col-12 col-md-2">
+                    <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
+                        style="background-color: #ffffff;">
+                        <div>
+                            <div class="fw-bold fs-4 text-dark">{{ number_format($combinedTotal, 1) }}</div>
+                            <div class="small">Combined Total</div>
+                        </div>
+                        <i class="bi bi-bar-chart fs-2 position-absolute top-0 end-0 m-2" style="color: #d6c7e8;"></i>
+                    </div>
+                </div>
+
+                <!-- Combined Unused -->
+                <div class="col-12 col-md-2">
+                    <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
+                        style="background-color: #ffffff;">
+                        <div>
+                            <div class="fw-bold fs-4">{{ number_format(max(0, $combinedTotal - $combinedUsed), 1) }}</div>
+                            <div class="small">Combined Unused</div>
+                        </div>
+                        <i class="bi bi-speedometer2 fs-2 position-absolute top-0 end-0 m-2" style="color: #d6c7e8;"></i>
+                    </div>
+                </div>
+
+                <!-- Combined Utilization -->
+                <div class="col-12 col-md-2">
+                    @php
+                        $combinedUtilColor = match (true) {
+                            $combinedUtilization < 30 => 'text-success',
+                            $combinedUtilization < 70 => 'text-warning',
+                            default => 'text-danger',
+                        };
+                    @endphp
+                    <div class="card shadow-sm border-0 rounded-3 p-3 position-relative hover-scale"
+                        style="background-color: #ffffff;">
+                        <div>
+                            <div class="fw-bold fs-4 {{ $combinedUtilColor }}">
+                                {{ number_format($combinedUtilization, 2) }}%</div>
+                            <div class="small">Combined Utilization</div>
+                        </div>
+                        <i class="bi bi-percent fs-2 position-absolute top-0 end-0 m-2" style="color: #d6c7e8;"></i>
+                    </div>
+                </div>
+
+            </div>
         </div>
 
     </div>
@@ -514,14 +690,14 @@
                             <label class="form-label fw-bold">Truck Team:</label>
                             <select class="form-select" name="team" id="teamSelect">
                                 <option value="" selected>-- Filter by Team (optional) --</option>
-                                <option value="A">A</option>
-                                <option value="B">B</option>
+                                <option value="MY">MY Team</option>
+                                <option value="SG">SG Team</option>
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Trucks / Subcons:</label>
+                            <label class="form-label fw-bold">Trucks:</label>
                             <input type="text" id="truckSearch" class="form-control mb-2"
-                                placeholder="Search Truck/Subcon Number...">
+                                placeholder="Search Truck Number...">
 
                             <div class="mb-1">
                                 <input type="checkbox" id="selectAllTrucks" style="width:1.25em; height:1.25em; cursor:pointer; vertical-align:middle;">
@@ -530,6 +706,7 @@
                             <div id="truckCheckboxContainer" class="border rounded p-2"
                                 style="max-height: 220px; overflow-y: auto; background-color: #f8f9fa; display: grid; grid-template-columns: 1fr 1fr;">
                                 @foreach ($trucks_select as $truck)
+                                    @continue(($truck['source'] ?? 'truck') !== 'truck')
                                     <div class="truck-item" data-team="{{ $truck['team'] }}"
                                         data-number="{{ strtolower($truck['number']) }}"
                                         style="display:flex; align-items:center; gap:0.5rem; padding: 2px 4px;">
@@ -538,10 +715,8 @@
                                             style="width:1.25em; height:1.25em; flex-shrink:0; cursor:pointer;">
                                         <label class="mb-0" for="truck_{{ $truck['id'] }}" style="cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                                             {{ $truck['number'] }}
-                                            <span
-                                                class="badge bg-secondary ms-1">{{ ucfirst($truck['source'] ?? 'Truck') }}</span>
                                             @if (!empty($truck['team']))
-                                                <small class="text-muted">Team {{ $truck['team'] }}</small>
+                                                <small class="text-muted ms-1">{{ $truck['team'] }} Team</small>
                                             @endif
                                         </label>
                                     </div>
@@ -551,6 +726,46 @@
 
                             <div id="selectedList" class="mt-2 text-muted" style="font-size: 0.9rem;">
                                 <!-- Selected truck numbers will appear here -->
+                            </div>
+                        </div>
+
+                        <div id="tempSubconSection" class="border rounded p-3 mb-3" style="background:#fafafa;">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0 fw-bold">Subcons (Temporary)</h6>
+                                <small class="text-muted">Reserve placeholders by type/size; assign a real subcon later from the calendar.</small>
+                            </div>
+
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label">Truck Type</label>
+                                    <select class="form-select form-select-sm" name="temp_chassis_type">
+                                        <option value="">-- None --</option>
+                                        <option value="curtain">Curtain</option>
+                                        <option value="open">Open</option>
+                                        <option value="box">Box</option>
+                                        <option value="tailgate">Tailgate</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Size</label>
+                                    <select class="form-select form-select-sm" name="temp_size">
+                                        <option value="">-- None --</option>
+                                        <option value="Any">Any</option>
+                                        <option value="Small">Small</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Quantity</label>
+                                    <input type="number" id="temp_qty" name="temp_qty" class="form-control form-control-sm"
+                                        min="0" max="20" value="0">
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label">Labels (temp truck numbers)</label>
+                                    <div id="tempLabelInputs" class="d-flex flex-wrap gap-2">
+                                        {{-- Inputs rendered by JS based on quantity --}}
+                                    </div>
+                                    <small class="text-muted">Defaults to X1, X2, X3… — editable. Unique per (date, location).</small>
+                                </div>
                             </div>
                         </div>
 
@@ -979,9 +1194,11 @@
                     '</div>');
                 $('body').append($tooltip);
 
-                const cellOffset = $(this).closest('.availability-cell').offset();
-                const cellWidth = $(this).closest('.availability-cell').outerWidth();
+                const $parentCell = $(this).closest('.availability-cell, .temp-truck-cell');
+                const cellOffset = $parentCell.offset();
+                const cellWidth = $parentCell.outerWidth();
                 const tooltipWidth = $tooltip.outerWidth();
+                if (!cellOffset) return;
 
                 // Center the tooltip above the cell and shift right by adding offset
                 const leftPosition = cellOffset.left + (cellWidth / 2) - (tooltipWidth /
@@ -1093,6 +1310,124 @@
         $('#filter_daterange').on('cancel.daterangepicker', function() {
             $(this).val('');
             window.location.href = `?`;
+        });
+    });
+
+    // ========== Temporary Subcons (merged into Availability modal) ==========
+    $(function() {
+        const $qty = $('#temp_qty');
+        const $labelsContainer = $('#tempLabelInputs');
+
+        function renderLabelInputs() {
+            const qty = Math.max(0, Math.min(20, parseInt($qty.val(), 10) || 0));
+            const existing = $labelsContainer.find('input').map(function() {
+                return $(this).val();
+            }).get();
+
+            $labelsContainer.empty();
+            for (let i = 0; i < qty; i++) {
+                const defaultVal = existing[i] && existing[i].trim() !== '' ? existing[i] : ('X' + (i + 1));
+                const $input = $('<input>', {
+                    type: 'text',
+                    name: 'labels[]',
+                    class: 'form-control form-control-sm',
+                    placeholder: 'Label ' + (i + 1),
+                    value: defaultVal,
+                    maxlength: 50,
+                    required: true,
+                    style: 'width: 110px;',
+                });
+                $labelsContainer.append($input);
+            }
+        }
+
+        $qty.on('input change', renderLabelInputs);
+
+        $('#availabilityModal').on('show.bs.modal', function() {
+            renderLabelInputs();
+        });
+
+        // Click on a temp-truck cell → open detail modal (reuse #cellInfoModal)
+        $(document).on('click', '.temp-truck-cell', function() {
+            const $cell = $(this);
+            if ($cell.data('has-cell') !== true && $cell.data('has-cell') !== 'true') return;
+
+            const tempId = $cell.data('temp-id');
+            if (!tempId) return;
+
+            const modal = new bootstrap.Modal(document.getElementById('cellInfoModal'));
+            const content = document.getElementById('cellInfoContent');
+            content.innerHTML =
+                '<div class="p-4 text-center"><div class="spinner-border" role="status"></div></div>';
+            modal.show();
+
+            const params = new URLSearchParams({ temp_truck_id: tempId });
+            fetch(`/calendar/cell-details?${params.toString()}`)
+                .then(res => res.text())
+                .then(html => content.innerHTML = html)
+                .catch(() => content.innerHTML =
+                    '<div class="p-3 text-danger">Failed to load details.</div>');
+        });
+
+        // Assign / Unassign subcon for a temp truck (delegated — partial is loaded via innerHTML)
+        function postAssignSubcon(tempId, subconId) {
+            fetch(`/calendar/temp-trucks/${encodeURIComponent(tempId)}/assign-subcon`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ subcon_id: subconId || null }),
+            })
+            .then(async (res) => {
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) {
+                    throw new Error(data.message || 'Assignment failed');
+                }
+                return data;
+            })
+            .then((data) => {
+                Swal.fire({
+                    title: 'Saved',
+                    text: data.message || 'Subcon assignment updated.',
+                    icon: 'success',
+                    timer: 1400,
+                    showConfirmButton: false,
+                }).then(() => window.location.reload());
+            })
+            .catch((err) => {
+                Swal.fire('Error', err.message || 'Assignment failed', 'error');
+            });
+        }
+
+        $(document).on('submit', '#assignSubconForm', function(e) {
+            e.preventDefault();
+            const root = document.getElementById('tempCellDetails');
+            if (!root) return;
+            const tempId = root.dataset.tempId;
+            const subconId = $('#assignSubconSelect').val();
+            if (!subconId) {
+                Swal.fire('Select a subcon', 'Please pick a subcon first.', 'info');
+                return;
+            }
+            postAssignSubcon(tempId, subconId);
+        });
+
+        $(document).on('click', '#unassignSubconBtn', function() {
+            const root = document.getElementById('tempCellDetails');
+            if (!root) return;
+            const tempId = root.dataset.tempId;
+            Swal.fire({
+                title: 'Unassign subcon?',
+                text: 'The label will keep its current value but lose the subcon link.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, unassign',
+                confirmButtonColor: '#d33',
+            }).then((r) => {
+                if (r.isConfirmed) postAssignSubcon(tempId, null);
+            });
         });
     });
 </script>

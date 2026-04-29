@@ -33,14 +33,31 @@ class Truck extends Model
     protected static $chassisTypeMap = [
         1 => 'curtain',
         2 => 'open',
+        3 => 'box',
         4 => 'tailgate',
     ];
 
     protected static $chassisTypeReverseMap = [
         'curtain' => 1,
         'open' => 2,
+        'box' => 3,
         'tailgate' => 4,
     ];
+
+    protected static $sizeMap = [
+        1 => 'Any',
+        2 => 'Small',
+    ];
+
+    protected static $sizeReverseMap = [
+        'Any' => 1,
+        'Small' => 2,
+    ];
+
+    public static function chassisTypeMap(): array
+    {
+        return static::$chassisTypeMap;
+    }
 
     public function getChassisTypeAttribute($value)
     {
@@ -56,6 +73,23 @@ class Truck extends Model
             $this->attributes['chassis_type'] = static::$chassisTypeReverseMap[$value];
         } else {
             $this->attributes['chassis_type'] = $value;
+        }
+    }
+
+    public function getSizeAttribute($value)
+    {
+        if (is_numeric($value)) {
+            return static::$sizeMap[(int) $value] ?? $value;
+        }
+        return $value;
+    }
+
+    public function setSizeAttribute($value)
+    {
+        if (isset(static::$sizeReverseMap[$value])) {
+            $this->attributes['size'] = static::$sizeReverseMap[$value];
+        } else {
+            $this->attributes['size'] = $value;
         }
     }
 

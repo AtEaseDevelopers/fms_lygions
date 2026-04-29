@@ -437,6 +437,7 @@
         const allSubcons = @json($subcons ?? []);
         let availableTrucks = allTrucks;
         let availableSubcons = allSubcons;
+        let availableTempTrucks = [];
         const currentTruckNumber = document.getElementById(`truck_number_${modalId}`)?.value || '';
 
         const pickTypeEl = document.getElementById(`pick_truck_type_${modalId}`);
@@ -454,6 +455,7 @@
             if (!date) {
                 availableTrucks = allTrucks;
                 availableSubcons = allSubcons;
+                availableTempTrucks = [];
                 updateTruckNumbers();
                 return;
             }
@@ -462,11 +464,13 @@
                 .then(data => {
                     availableTrucks = data.trucks;
                     availableSubcons = data.subcons;
+                    availableTempTrucks = data.temp_trucks || [];
                     updateTruckNumbers();
                 })
                 .catch(() => {
                     availableTrucks = allTrucks;
                     availableSubcons = allSubcons;
+                    availableTempTrucks = [];
                     updateTruckNumbers();
                 });
         }
@@ -526,6 +530,19 @@
             availableSubcons.filter(isValid).forEach(s => {
                 const opt = document.createElement('option');
                 opt.value = s.truck_no + ' (Subcon)';
+                truckDatalist.appendChild(opt);
+            });
+
+            // Add ALL temporary trucks for this date — no type/size filter.
+            // Once a real subcon is assigned, surface the subcon's truck no with " (Subcon)";
+            // otherwise show the temp label with " (Temp)".
+            availableTempTrucks.forEach(t => {
+                const opt = document.createElement('option');
+                if (t.subcon_id && t.subcon_truck_no) {
+                    opt.value = t.subcon_truck_no + ' (Subcon)';
+                } else {
+                    opt.value = t.truck_no + ' (Temp)';
+                }
                 truckDatalist.appendChild(opt);
             });
 

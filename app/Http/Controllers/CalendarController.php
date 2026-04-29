@@ -11,6 +11,8 @@ use Carbon\Carbon;
 use App\Models\Unit;
 use App\Models\Driver;
 use App\Models\Subcon;
+use App\Models\TemporaryTruck;
+use Illuminate\Support\Facades\DB;
 class CalendarController extends Controller
 {
 
@@ -106,6 +108,37 @@ class CalendarController extends Controller
 
         $trucks_select = $truck_select->merge($subcons);
 
+        $tempMatrix = $this->buildTempTruckMatrix($dates, $startDateStr, $endDateStr, $consignmentMap, $unitsMap);
+
+        // Temp subcon capacity sums (MY only, mirroring the existing truck cards)
+        $tempTotalMy = 0.0;
+        $tempUsedMy = 0.0;
+        $tempDateMatrix = [];
+        foreach ($dates as $d) {
+            $tempDateMatrix[$d['date']->format('Y-m-d')] = ['total_capacity' => 0.0, 'used_capacity' => 0.0];
+        }
+        foreach ($tempMatrix as $label => $byLocation) {
+            foreach ($byLocation as $loc => $entry) {
+                if ($loc !== 'MY') continue;
+                foreach ($entry['cells'] as $dateKey => $cell) {
+                    $cellCapacity = (float) ($cell['subcon_capacity'] ?? 0);
+                    $cellUsed = (float) ($cell['used_capacity'] ?? 0);
+                    $tempTotalMy += $cellCapacity;
+                    $tempUsedMy += $cellUsed;
+                    if (isset($tempDateMatrix[$dateKey])) {
+                        $tempDateMatrix[$dateKey]['total_capacity'] += $cellCapacity;
+                        $tempDateMatrix[$dateKey]['used_capacity'] += $cellUsed;
+                    }
+                }
+            }
+        }
+        $tempUtilizationMy = $tempTotalMy > 0 ? ($tempUsedMy / $tempTotalMy) * 100 : 0;
+
+        // Combined totals across truck calendar (MY) + temp subcon calendar (MY)
+        $combinedTotal = ($summary['totalMyCapacity'] ?? 0) + $tempTotalMy;
+        $combinedUsed = ($summary['totalMyUsed'] ?? 0) + $tempUsedMy;
+        $combinedUtilization = $combinedTotal > 0 ? ($combinedUsed / $combinedTotal) * 100 : 0;
+
         return view('calendar.index', array_merge([
             'trucks' => $trucks,
             'dates' => $dates,
@@ -117,8 +150,85 @@ class CalendarController extends Controller
             'totalVisibleTrucks' => $trucks->count(),
             'trucks_select' => $trucks_select,
             'drivers' => $drivers,
+            'tempMatrix' => $tempMatrix,
+            'tempTotalMy' => $tempTotalMy,
+            'tempUsedMy' => $tempUsedMy,
+            'tempUtilizationMy' => $tempUtilizationMy,
+            'tempDateMatrix' => $tempDateMatrix,
+            'combinedTotal' => $combinedTotal,
+            'combinedUsed' => $combinedUsed,
+            'combinedUtilization' => $combinedUtilization,
             'getColor' => fn($util) => $this->getColor($util),
         ], $summary));
+    }
+
+    private function buildTempTruckMatrix($dates, string $startDateStr, string $endDateStr, $consignmentMap, $unitsMap = null): array
+    {
+        $temps = TemporaryTruck::whereBetween('date', [$startDateStr, $endDateStr])
+            ->orderBy('label')
+            ->orderBy('date')
+            ->get();
+
+        $subconIds = $temps->pluck('subcon_id')->filter()->unique()->values();
+        $subconMap = $subconIds->isNotEmpty()
+            ? Subcon::whereIn('id', $subconIds)->get()->keyBy('id')
+            : collect();
+
+        $parseToArray = fn($v) => $this->parseToArray($v);
+        $calcUsed = function ($consignments) use ($parseToArray, $unitsMap) {
+            if (!$unitsMap) return 0.0;
+            $used = 0.0;
+            foreach ($consignments as $c) {
+                $qtys = $parseToArray($c->quantity);
+                $unitStrings = json_decode($c->unit, true);
+                if (!is_array($unitStrings)) {
+                    $unitStrings = $parseToArray($c->unit);
+                }
+                $units = array_map(fn($u) => $unitsMap[trim((string) $u)] ?? 0, $unitStrings);
+                $max = max(count($qtys), count($units), 1);
+                for ($i = 0; $i < $max; $i++) {
+                    $used += ($qtys[$i] ?? $qtys[0] ?? 0) * ($units[$i] ?? $units[0] ?? 1);
+                }
+            }
+            return $used;
+        };
+
+        // Shape: [label][location] => ['meta' => [...], 'cells' => [dateKey => cellData]]
+        $matrix = [];
+        foreach ($temps as $t) {
+            $dateKey = (new Carbon($t->date))->format('Y-m-d');
+            $consKey = $t->label . '-' . $dateKey;
+            $dayCons = $consignmentMap->get($consKey) ?? collect();
+
+            // Filter by location: MY = pick_point != Singapore, SG = pick_point == Singapore
+            $matchingCons = $t->location === 'SG'
+                ? $dayCons->where('pick_point', 'Singapore')
+                : $dayCons->where('pick_point', '!=', 'Singapore');
+
+            if (!isset($matrix[$t->label][$t->location])) {
+                $matrix[$t->label][$t->location] = [
+                    'meta' => [
+                        'chassis_type' => $t->chassis_type,
+                        'size' => $t->size,
+                    ],
+                    'cells' => [],
+                ];
+            }
+
+            $subcon = $t->subcon_id ? $subconMap->get($t->subcon_id) : null;
+
+            $matrix[$t->label][$t->location]['cells'][$dateKey] = [
+                'id' => $t->id,
+                'consignors' => $matchingCons->pluck('consignor')->values(),
+                'consignment_count' => $matchingCons->count(),
+                'subcon_id' => $t->subcon_id,
+                'subcon_name' => $subcon?->subcon_name,
+                'subcon_capacity' => (float) ($subcon?->floor_space ?? 0),
+                'used_capacity' => $calcUsed($matchingCons),
+            ];
+        }
+
+        return $matrix;
     }
     private function getDays(Request $request): int
     {
@@ -280,6 +390,11 @@ class CalendarController extends Controller
     }
     public function getCellDetails(Request $request)
     {
+        $tempId = $request->query('temp_truck_id');
+        if ($tempId) {
+            return $this->getTempCellDetails($tempId);
+        }
+
         $truckNumber = $request->query('truck');
         $location = $request->query('location');
         $date = $request->query('date');
@@ -348,6 +463,109 @@ class CalendarController extends Controller
             'totalCapacity',
             'consignments'
         ));
+    }
+
+    private function getTempCellDetails($tempId)
+    {
+        $temp = TemporaryTruck::find($tempId);
+        if (!$temp) {
+            return response('<div class="p-3 text-danger">❌ Temporary truck not found</div>', 404);
+        }
+
+        $date = $temp->date->format('Y-m-d');
+        $location = $temp->location;
+        $truckNumber = $temp->label;
+
+        $consignments = Consignment::with('driverInfo')
+            ->where('truck_number', $temp->label)
+            ->whereDate('load_date', $date)
+            ->get();
+
+        $consignments = $location === 'SG'
+            ? $consignments->where('pick_point', 'Singapore')
+            : $consignments->where('pick_point', '!=', 'Singapore');
+
+        $consignors = $consignments->map(fn($c) => [
+            'name' => $c->consignor,
+            'capacity' => null,
+        ])->values()->all();
+
+        $availability = null;
+        $totalCapacity = 0;
+        $usedCapacity = 0;
+        $isTemp = true;
+        $tempTruckId = $temp->id;
+        $tempMeta = [
+            'chassis_type' => $temp->chassis_type,
+            'size' => $temp->size,
+        ];
+
+        // Strict filter: only subcons whose chassis_type AND size match this temp's.
+        // No exclusion of subcons already assigned elsewhere — the same subcon can back multiple cells.
+        $candidateSubcons = Subcon::query()
+            ->where('chassis_type', $temp->chassis_type)
+            ->where('size', $temp->size)
+            ->orderBy('truck_no')
+            ->get();
+
+        $assignedSubcon = $temp->subcon_id ? Subcon::find($temp->subcon_id) : null;
+
+        return view('calendar.calendar-cell-details', compact(
+            'truckNumber',
+            'date',
+            'location',
+            'availability',
+            'consignors',
+            'usedCapacity',
+            'totalCapacity',
+            'consignments',
+            'isTemp',
+            'tempTruckId',
+            'tempMeta',
+            'candidateSubcons',
+            'assignedSubcon'
+        ));
+    }
+
+    public function assignSubconToTemp(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'subcon_id' => 'nullable|integer|exists:subcons,id',
+        ]);
+
+        $temp = TemporaryTruck::find($id);
+        if (!$temp) {
+            return response()->json(['ok' => false, 'message' => 'Temporary truck not found'], 404);
+        }
+
+        if (empty($validated['subcon_id'])) {
+            $temp->subcon_id = null;
+            $temp->save();
+            return response()->json(['ok' => true, 'message' => 'Subcon unassigned']);
+        }
+
+        $subcon = Subcon::find($validated['subcon_id']);
+        if (!$subcon) {
+            return response()->json(['ok' => false, 'message' => 'Subcon not found'], 404);
+        }
+
+        $temp->subcon_id = $subcon->id;
+        $temp->save();
+
+        return response()->json([
+            'ok' => true,
+            'message' => "Assigned to {$subcon->subcon_name} ({$subcon->truck_no})",
+        ]);
+    }
+
+    public function destroyTempTruck($id)
+    {
+        $temp = TemporaryTruck::find($id);
+        if (!$temp) {
+            return response()->json(['ok' => false, 'message' => 'Not found'], 404);
+        }
+        $temp->delete();
+        return response()->json(['ok' => true]);
     }
 
     private function calculateUsedCapacity($consignments)
@@ -419,15 +637,36 @@ class CalendarController extends Controller
     {
         // Validate input
         $validated = $request->validate([
-            'truck_numbers' => 'required|array',
-            'truck_numbers.*' => 'required|string',
+            'truck_numbers' => 'nullable|array',
+            'truck_numbers.*' => 'string',
             'status' => 'required|string',
             'location' => 'required|string',
             'date' => 'nullable|date',
             'date_range' => 'nullable|string',
+            'temp_chassis_type' => 'nullable|string|max:50',
+            'temp_size' => 'nullable|string|max:50',
+            'temp_qty' => 'nullable|integer|min:0|max:50',
+            'labels' => 'nullable|array|max:50',
+            'labels.*' => 'nullable|string|max:50',
         ]);
 
-        \Log::info('Truck numbers received: ', $validated['truck_numbers']);
+        $truckNumbers = $validated['truck_numbers'] ?? [];
+        $tempLabels = array_values(array_filter(
+            array_map(fn($l) => trim((string) $l), $validated['labels'] ?? []),
+            fn($l) => $l !== ''
+        ));
+        $tempType = $validated['temp_chassis_type'] ?? null;
+        $tempSize = $validated['temp_size'] ?? null;
+
+        if (empty($truckNumbers) && empty($tempLabels)) {
+            return back()->with('swal', [
+                'icon' => 'error',
+                'title' => 'Nothing to save',
+                'text' => 'Pick at least one truck/subcon or add temporary subcon labels.',
+            ]);
+        }
+
+        \Log::info('Truck numbers received: ', $truckNumbers);
 
         $status = strtolower($validated['status']);
         $firstLocation = strtoupper($validated['location']);
@@ -456,7 +695,7 @@ class CalendarController extends Controller
         $trucks_select = $truck_select->merge($subcons);
         \Log::info('Merged trucks_select:', $trucks_select->toArray());
 
-        foreach ($validated['truck_numbers'] as $truckNumber) {
+        foreach ($truckNumbers as $truckNumber) {
 
             // Find the selected truck/subcon in the merged list
             $truckData = $trucks_select->firstWhere('number', $truckNumber);
@@ -539,10 +778,103 @@ class CalendarController extends Controller
             \Log::info("Processed $truckNumber", ['truck_id' => $truckId, 'subcon_id' => $subconId, 'status' => $status]);
         }
 
+        // Temporary subcons: only created when status=available with a date range
+        $tempCreated = 0;
+        if (!empty($tempLabels)) {
+            if ($status !== 'available') {
+                return back()->with('swal', [
+                    'icon' => 'error',
+                    'title' => 'Temp subcons need status = available',
+                    'text' => 'Set status to Available (with a date range) to add temporary subcons.',
+                ]);
+            }
+            if (empty($tempType) || empty($tempSize)) {
+                return back()->with('swal', [
+                    'icon' => 'error',
+                    'title' => 'Missing type or size',
+                    'text' => 'Select truck type and size for the temporary subcons.',
+                ]);
+            }
+            if (empty($validated['date_range'])) {
+                return back()->with('swal', [
+                    'icon' => 'error',
+                    'title' => 'Missing date range',
+                    'text' => 'Pick a date range for temporary subcons.',
+                ]);
+            }
+
+            $duplicateLabels = array_diff_assoc($tempLabels, array_unique($tempLabels));
+            if (!empty($duplicateLabels)) {
+                return back()->with('swal', [
+                    'icon' => 'error',
+                    'title' => 'Duplicate labels',
+                    'text' => 'Labels must be unique within the form: ' . implode(', ', array_unique($duplicateLabels)),
+                ]);
+            }
+
+            $rangeParts = explode(' to ', $validated['date_range']);
+            if (count($rangeParts) !== 2) {
+                return back()->with('swal', [
+                    'icon' => 'error',
+                    'title' => 'Invalid date range',
+                    'text' => 'Could not parse the date range.',
+                ]);
+            }
+            $tempStart = Carbon::parse(trim($rangeParts[0]));
+            $tempEnd = Carbon::parse(trim($rangeParts[1]));
+
+            $tempDates = [];
+            for ($d = $tempStart->copy(); $d->lte($tempEnd); $d->addDay()) {
+                $tempDates[] = $d->format('Y-m-d');
+            }
+
+            $existing = TemporaryTruck::whereIn('date', $tempDates)
+                ->where('location', $firstLocation)
+                ->whereIn('label', $tempLabels)
+                ->get();
+            if ($existing->isNotEmpty()) {
+                $conflicts = $existing->map(fn($e) => $e->label . ' on ' . $e->date->format('Y-m-d'))->all();
+                return back()->with('swal', [
+                    'icon' => 'error',
+                    'title' => 'Label already exists',
+                    'text' => 'These (label, date) pairs already exist for ' . $firstLocation . ': ' . implode('; ', $conflicts),
+                ]);
+            }
+
+            try {
+                DB::transaction(function () use ($tempDates, $firstLocation, $tempLabels, $tempType, $tempSize, &$tempCreated) {
+                    foreach ($tempDates as $date) {
+                        foreach ($tempLabels as $label) {
+                            TemporaryTruck::create([
+                                'date' => $date,
+                                'location' => $firstLocation,
+                                'chassis_type' => $tempType,
+                                'size' => $tempSize,
+                                'label' => $label,
+                                'floor_space' => null,
+                            ]);
+                            $tempCreated++;
+                        }
+                    }
+                });
+            } catch (\Throwable $e) {
+                \Log::error('Failed to create temporary trucks', ['error' => $e->getMessage()]);
+                return back()->with('swal', [
+                    'icon' => 'error',
+                    'title' => 'Failed to save temp subcons',
+                    'text' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $msg = 'Availability records created successfully.';
+        if ($tempCreated > 0) {
+            $msg .= " Added {$tempCreated} temporary subcon record(s).";
+        }
         return redirect()->back()->with('swal', [
             'icon' => 'success',
             'title' => 'Created!',
-            'text' => 'Availability records created successfully.'
+            'text' => $msg,
         ]);
     }
 

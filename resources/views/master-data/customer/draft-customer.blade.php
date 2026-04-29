@@ -145,7 +145,7 @@
                                         <td>{{ $customer->tin }}</td>
                                         <td>{{ $customer->service_tax_no }}</td>
                                         <td>{{ $customer->contact_person }}</td>
-                                        <td>{{ $customer->term }}</td>
+                                        <td>{{ $customer->convertTermToWord($customer->term) ?? $customer->term }}</td>
                                         <td class="text-center">
                                             <a href="{{ route('draft-customer.edit', $customer->id) }}"
                                                 class="btn btn-info">

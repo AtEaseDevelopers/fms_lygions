@@ -5,6 +5,7 @@ use App\Http\Controllers\ConsignmentController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DriverController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\ParamController;
 use App\Http\Controllers\RoleController;
@@ -50,6 +51,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/calendar/cell-details', [CalendarController::class, 'getCellDetails'])->name('calendar.cell-details');
     Route::post('/availability/delete', [CalendarController::class, 'deleteAvailability'])->name('availability.delete');
     Route::delete('/calendar/{truck}/{location}/{date}', [CalendarController::class, 'destroy'])->name('calendar.destroy');
+    Route::post('/calendar/temp-trucks/{id}/assign-subcon', [CalendarController::class, 'assignSubconToTemp'])->name('calendar.temp-trucks.assign-subcon');
+    Route::delete('/calendar/temp-trucks/{id}', [CalendarController::class, 'destroyTempTruck'])->name('calendar.temp-trucks.destroy');
     Route::resource('calendar', CalendarController::class);
     Route::post('/calendar/update/{id}', [CalendarController::class, 'update']);
     Route::get('/archived-consignment-order', [ConsignmentController::class, 'archivedIndex'])->name('archived-consignment-order.index');
@@ -62,4 +65,6 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/draft-customer/sync', [CustomerController::class, 'syncDraftToCustomer'])->name('draft-customer.sync');
     Route::get('/customers/{name}/locations', [ConsignmentController::class, 'getCustomerLocations'])->name('customers.locations');
     Route::get('/api/available-trucks', [ConsignmentController::class, 'getAvailableTrucks'])->name('api.available-trucks');
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
 });

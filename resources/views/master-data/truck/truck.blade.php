@@ -67,55 +67,55 @@
                                     <th>No</th>
                                     <th>
                                         <a class="text-dark text-decoration-none"
-                                            href="{{ route('truck.index', array_merge(request()->query(), ['sort_by' => 'number', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'number' ? 'desc' : 'asc'])) }}">
+                                            href="{{ route('truck.index', array_merge(request()->query(), ['sort_by' => 'number', 'sort_order' => $sortOrder === 'asc' && $sortBy === 'number' ? 'desc' : 'asc'])) }}">
                                             Number
-                                            @if (request('sort_by') == 'number')
+                                            @if ($sortBy === 'number')
                                                 <i
-                                                    class="bi bi-caret-{{ request('sort_order') == 'asc' ? 'up' : 'down' }}-fill"></i>
+                                                    class="bi bi-caret-{{ $sortOrder === 'asc' ? 'up' : 'down' }}-fill"></i>
                                             @endif
                                         </a>
                                     </th>
                                     <th>Team</th>
                                     <th>
                                         <a class="text-dark text-decoration-none"
-                                            href="{{ route('truck.index', array_merge(request()->query(), ['sort_by' => 'group', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'group' ? 'desc' : 'asc'])) }}">
+                                            href="{{ route('truck.index', array_merge(request()->query(), ['sort_by' => 'group', 'sort_order' => $sortOrder === 'asc' && $sortBy === 'group' ? 'desc' : 'asc'])) }}">
                                             Group
-                                            @if (request('sort_by') == 'group')
+                                            @if ($sortBy === 'group')
                                                 <i
-                                                    class="bi bi-caret-{{ request('sort_order') == 'asc' ? 'up' : 'down' }}-fill"></i>
+                                                    class="bi bi-caret-{{ $sortOrder === 'asc' ? 'up' : 'down' }}-fill"></i>
                                             @endif
                                         </a>
                                     </th>
                                     <th>Size</th>
                                     <th>
                                         <a class="text-dark text-decoration-none"
-                                            href="{{ route('truck.index', array_merge(request()->query(), ['sort_by' => 'tonnage', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'tonnage' ? 'desc' : 'asc'])) }}">
+                                            href="{{ route('truck.index', array_merge(request()->query(), ['sort_by' => 'tonnage', 'sort_order' => $sortOrder === 'asc' && $sortBy === 'tonnage' ? 'desc' : 'asc'])) }}">
                                             Tonnage
-                                            @if (request('sort_by') == 'tonnage')
+                                            @if ($sortBy === 'tonnage')
                                                 <i
-                                                    class="bi bi-caret-{{ request('sort_order') == 'asc' ? 'up' : 'down' }}-fill"></i>
+                                                    class="bi bi-caret-{{ $sortOrder === 'asc' ? 'up' : 'down' }}-fill"></i>
                                             @endif
                                         </a>
                                     </th>
                                     <th>
                                         <a class="text-dark text-decoration-none"
-                                            href="{{ route('truck.index', array_merge(request()->query(), ['sort_by' => 'floor_space', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'floor_space' ? 'desc' : 'asc'])) }}">
+                                            href="{{ route('truck.index', array_merge(request()->query(), ['sort_by' => 'floor_space', 'sort_order' => $sortOrder === 'asc' && $sortBy === 'floor_space' ? 'desc' : 'asc'])) }}">
                                             <span class="d-inline-block" style="white-space: normal;"> Floor Space (In sqft)
                                             </span>
 
-                                            @if (request('sort_by') == 'floor_space')
+                                            @if ($sortBy === 'floor_space')
                                                 <i
-                                                    class="bi bi-caret-{{ request('sort_order') == 'asc' ? 'up' : 'down' }}-fill"></i>
+                                                    class="bi bi-caret-{{ $sortOrder === 'asc' ? 'up' : 'down' }}-fill"></i>
                                             @endif
                                         </a>
                                     </th>
                                     <th>
                                         <a class="text-dark text-decoration-none"
-                                            href="{{ route('truck.index', array_merge(request()->query(), ['sort_by' => 'chassis_type', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'chassis_type' ? 'desc' : 'asc'])) }}">
+                                            href="{{ route('truck.index', array_merge(request()->query(), ['sort_by' => 'chassis_type', 'sort_order' => $sortOrder === 'asc' && $sortBy === 'chassis_type' ? 'desc' : 'asc'])) }}">
                                             <span class="d-inline-block" style="white-space: normal;"> Chassis Type</span>
-                                            @if (request('sort_by') == 'chassis_type')
+                                            @if ($sortBy === 'chassis_type')
                                                 <i
-                                                    class="bi bi-caret-{{ request('sort_order') == 'asc' ? 'up' : 'down' }}-fill"></i>
+                                                    class="bi bi-caret-{{ $sortOrder === 'asc' ? 'up' : 'down' }}-fill"></i>
                                             @endif
                                         </a>
                                     </th>
@@ -213,11 +213,11 @@
                                                                         <option value="" disabled
                                                                             {{ $truck->team == null ? 'selected' : '' }}>
                                                                             -- Select Team --</option>
-                                                                        <option value="A"
-                                                                            {{ $truck->team == 'A' ? 'selected' : '' }}>A
+                                                                        <option value="MY"
+                                                                            {{ $truck->team == 'MY' ? 'selected' : '' }}>MY Team
                                                                         </option>
-                                                                        <option value="B"
-                                                                            {{ $truck->team == 'B' ? 'selected' : '' }}>B
+                                                                        <option value="SG"
+                                                                            {{ $truck->team == 'SG' ? 'selected' : '' }}>SG Team
                                                                         </option>
                                                                     </select>
                                                         </div>

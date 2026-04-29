@@ -9,6 +9,11 @@ class DraftCustomer extends Model
 {
     use HasFactory;
 
+    const TERM_CASH = 1;
+    const TERM_30_DAYS = 2;
+    const TERM_45_DAYS = 3;
+    const TERM_60_DAYS = 4;
+
     protected $fillable = [
         'name',
         'nickname',
@@ -43,4 +48,18 @@ class DraftCustomer extends Model
 {
     return $this->hasOne(Customer::class, 'draft_customer_id');
 }
+
+    public function convertTermToWord($term): ?string
+    {
+        if ($term === null || $term === '') {
+            return null;
+        }
+        switch ((int) $term) {
+            case self::TERM_CASH:    return 'Cash';
+            case self::TERM_30_DAYS: return '30 Days';
+            case self::TERM_45_DAYS: return '45 Days';
+            case self::TERM_60_DAYS: return '60 Days';
+        }
+        return null;
+    }
 }

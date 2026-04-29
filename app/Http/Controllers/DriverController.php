@@ -18,6 +18,7 @@ class DriverController extends Controller
 
         $drivers = Driver::query()
             ->where('resigned', 0)
+            ->where('is_outsider', 0)
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'like', "%{$search}%")

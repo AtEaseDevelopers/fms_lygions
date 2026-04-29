@@ -1,3 +1,89 @@
+@php
+    $isTemp = $isTemp ?? false;
+@endphp
+@if ($isTemp)
+    <div class="text-start" id="tempCellDetails" data-temp-id="{{ $tempTruckId }}">
+        <table class="table table-bordered table-sm">
+            <tbody>
+                <tr>
+                    <th style="width: 30%;">Temp Truck Label</th>
+                    <td><strong>{{ $truckNumber }}</strong> ({{ $location }})
+                        <span class="badge bg-secondary ms-1">Temp</span>
+                        @if (!empty($assignedSubcon))
+                            <span class="badge bg-success ms-1">Assigned</span>
+                        @endif
+                    </td>
+                </tr>
+                <tr>
+                    <th>Date</th>
+                    <td>{{ \Carbon\Carbon::parse($date)->format('d M Y') }}</td>
+                </tr>
+                <tr>
+                    <th>Type / Size</th>
+                    <td>{{ $tempMeta['chassis_type'] ?? '-' }} / {{ $tempMeta['size'] ?? '-' }}</td>
+                </tr>
+                @if (count($consignors) > 0 || !empty($assignedSubcon))
+                <tr>
+                    <th>Subcon</th>
+                    <td>
+                        @if (!empty($assignedSubcon))
+                            <div class="mb-2">
+                                <strong>{{ $assignedSubcon->subcon_name }}</strong>
+                                <span class="text-muted">— truck {{ $assignedSubcon->truck_no }}</span>
+                            </div>
+                        @endif
+                        <form id="assignSubconForm" class="d-flex gap-2 align-items-center">
+                            <select name="subcon_id" id="assignSubconSelect" class="form-select form-select-sm">
+                                <option value="">-- Select subcon to assign --</option>
+                                @foreach ($candidateSubcons as $s)
+                                    <option value="{{ $s->id }}"
+                                        {{ optional($assignedSubcon)->id === $s->id ? 'selected' : '' }}>
+                                        {{ $s->subcon_name }} ({{ $s->truck_no }})
+                                        @if ($s->size)
+                                            — {{ $s->size }}
+                                        @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                {{ !empty($assignedSubcon) ? 'Update' : 'Assign' }}
+                            </button>
+                            @if (!empty($assignedSubcon))
+                                <button type="button" id="unassignSubconBtn" class="btn btn-outline-secondary btn-sm">
+                                    Unassign
+                                </button>
+                            @endif
+                        </form>
+                        @if (count($candidateSubcons) === 0 && empty($assignedSubcon))
+                            <small class="text-muted d-block mt-1">
+                                No registered subcons match this type / size.
+                            </small>
+                        @endif
+                        <small class="text-muted d-block mt-2">
+                            Assigning a subcon replaces the placeholder label with the subcon's actual truck number.
+                            Existing consignments on this date/location are re-pointed automatically.
+                        </small>
+                    </td>
+                </tr>
+                @endif
+                <tr>
+                    <th>Consignors</th>
+                    <td>
+                        @if (count($consignors) === 0)
+                            <em class="text-muted">No consignments assigned to this label yet.</em>
+                        @else
+                            <ul class="mb-0 ps-3">
+                                @foreach ($consignors as $c)
+                                    <li>{{ $c['name'] }}</li>
+                                @endforeach
+                            </ul>
+                        @endif
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+@else
 <div class="text-start">
     <form id="updateAvailabilityForm" onsubmit="handleFormSubmit(event, this)">
         <table class="table table-bordered table-sm">
@@ -103,4 +189,5 @@
         @endif
     </form>
 </div>
+@endif
 

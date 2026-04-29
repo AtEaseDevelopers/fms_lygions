@@ -513,6 +513,7 @@
     const allSubcons = @json($subcons);
     let availableTrucks = allTrucks;
     let availableSubcons = allSubcons;
+    let availableTempTrucks = [];
 
     function normalize(val) {
         return (val || '').toString().trim().toLowerCase();
@@ -522,6 +523,7 @@
         if (!date) {
             availableTrucks = allTrucks;
             availableSubcons = allSubcons;
+            availableTempTrucks = [];
             updateTruckNumbers();
             return;
         }
@@ -530,11 +532,13 @@
             .then(data => {
                 availableTrucks = data.trucks;
                 availableSubcons = data.subcons;
+                availableTempTrucks = data.temp_trucks || [];
                 updateTruckNumbers();
             })
             .catch(() => {
                 availableTrucks = allTrucks;
                 availableSubcons = allSubcons;
+                availableTempTrucks = [];
                 updateTruckNumbers();
             });
     }
@@ -589,6 +593,19 @@
         availableSubcons.filter(isValid).forEach(s => {
             const opt = document.createElement('option');
             opt.value = s.truck_no + ' (Subcon)';
+            truckDatalist.appendChild(opt);
+        });
+
+        // Show ALL temp trucks for this date — no type/size filter.
+        // Once assigned, datalist value is the real subcon truck_no with " (Subcon)";
+        // otherwise it's the temp label with " (Temp)".
+        availableTempTrucks.forEach(t => {
+            const opt = document.createElement('option');
+            if (t.subcon_id && t.subcon_truck_no) {
+                opt.value = t.subcon_truck_no + ' (Subcon)';
+            } else {
+                opt.value = t.truck_no + ' (Temp)';
+            }
             truckDatalist.appendChild(opt);
         });
 

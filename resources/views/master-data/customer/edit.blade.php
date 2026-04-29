@@ -164,8 +164,13 @@
 
                             <div class="form-group mb-3">
                                 <label for="term">Term</label>
-                                <input type="text" name="term" id="term" class="form-control"
-                                    value="{{ old('term', $customer->term) }}">
+                                <select name="term" id="term" class="form-control">
+                                    <option value="" hidden>Select a term</option>
+                                    <option value="1" {{ old('term', $customer->term) == 1 ? 'selected' : '' }}>Cash</option>
+                                    <option value="2" {{ old('term', $customer->term) == 2 ? 'selected' : '' }}>30 Days</option>
+                                    <option value="3" {{ old('term', $customer->term) == 3 ? 'selected' : '' }}>45 Days</option>
+                                    <option value="4" {{ old('term', $customer->term) == 4 ? 'selected' : '' }}>60 Days</option>
+                                </select>
                             </div>
                         </div>
                     </div>

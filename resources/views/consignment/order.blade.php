@@ -469,9 +469,16 @@
                                             </select>
                                         </td> --}}
                                         <td>
-                                            <select class="form-select form-select-sm truck-number-select">
-                                                <option value=""></option>
-                                            </select>
+                                            <div class="d-flex align-items-center gap-1">
+                                                <select class="form-select form-select-sm truck-number-select">
+                                                    <option value=""></option>
+                                                </select>
+                                                @if(in_array($order->id, $affectedIds ?? []))
+                                                    <i class="bi bi-exclamation-triangle-fill text-warning express-affected-icon"
+                                                       data-bs-toggle="tooltip"
+                                                       title="Truck unassigned by an express swap. See dashboard alerts."></i>
+                                                @endif
+                                            </div>
                                         </td>
 
                                         <td>{{ $order['remarks'] ?? '-' }}</td>
@@ -658,8 +665,8 @@
                         <div class="mb-3">
                             <label class="form-label fw-bold">Truck Team:</label>
                             <select class="form-select">
-                                <option>1</option>
-                                <option>2</option>
+                                <option value="MY">MY Team</option>
+                                <option value="SG">SG Team</option>
                             </select>
                         </div>
                         <div class="mb-3">
@@ -963,7 +970,7 @@
             return matchPick || matchDrop;
         }
 
-        function populateRowSelect(row, trucks, subcons) {
+        function populateRowSelect(row, trucks, subcons, tempTrucks) {
             const pickType = normalize(row.dataset.pickType);
             const pickSize = normalize(row.dataset.pickSize);
             const dropType = normalize(row.dataset.dropType);
@@ -975,38 +982,50 @@
 
             const hasPickCriteria = !!pickType;
             const hasDropCriteria = !!dropType;
+            const hasCriteria = hasPickCriteria || hasDropCriteria;
 
-            // If no criteria at all, show empty dropdown
-            if (!hasPickCriteria && !hasDropCriteria) {
-                select.innerHTML = '<option value="">-</option>';
-                return;
-            }
-
-            // Clear and enable dropdown
+            // Always start with the placeholder option, never short-circuit
             select.innerHTML = '<option value="">-</option>';
             select.disabled = false;
 
-            // Add matching main trucks
-            trucks
-                .filter(t => isValidTruck(t, pickType, pickSize, dropType, dropSize))
-                .forEach(t => {
-                    const opt = document.createElement('option');
-                    opt.value = t.number;
-                    opt.textContent = t.number;
-                    if (t.number === selectedTruck) opt.selected = true;
-                    select.appendChild(opt);
-                });
+            // Add matching main trucks (only meaningful when criteria are set)
+            if (hasCriteria) {
+                trucks
+                    .filter(t => isValidTruck(t, pickType, pickSize, dropType, dropSize))
+                    .forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t.number;
+                        opt.textContent = t.number;
+                        if (t.number === selectedTruck) opt.selected = true;
+                        select.appendChild(opt);
+                    });
 
-            // Add matching subcon trucks
-            subcons
-                .filter(s => isValidTruck(s, pickType, pickSize, dropType, dropSize))
-                .forEach(s => {
-                    const opt = document.createElement('option');
-                    opt.value = s.truck_no;
-                    opt.textContent = s.truck_no + ' (Subcon)';
-                    if (s.truck_no === selectedTruck) opt.selected = true;
-                    select.appendChild(opt);
-                });
+                // Add matching subcon trucks
+                subcons
+                    .filter(s => isValidTruck(s, pickType, pickSize, dropType, dropSize))
+                    .forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.truck_no;
+                        opt.textContent = s.truck_no + ' (Subcon)';
+                        if (s.truck_no === selectedTruck) opt.selected = true;
+                        select.appendChild(opt);
+                    });
+            }
+
+            // Add ALL temporary subcon trucks for this date — even when criteria are missing.
+            // Once a subcon is assigned, show the real truck no with " (Subcon)"; otherwise " (Temp)".
+            // Option value stays as the temp's label so the consignment's truck_number is stable.
+            (tempTrucks || []).forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.truck_no;
+                if (t.subcon_id && t.subcon_truck_no) {
+                    opt.textContent = t.subcon_truck_no + ' (Subcon)';
+                } else {
+                    opt.textContent = t.truck_no + ' (Temp)';
+                }
+                if (t.truck_no === selectedTruck) opt.selected = true;
+                select.appendChild(opt);
+            });
 
             // Ensure currently assigned truck is always in the list
             if (selectedTruck && !select.querySelector(`option[value="${selectedTruck}"]`)) {
@@ -1031,13 +1050,13 @@
 
             Object.keys(dateRows).forEach(date => {
                 if (!date) {
-                    dateRows[date].forEach(row => populateRowSelect(row, ALL_TRUCKS, ALL_SUBCONS));
+                    dateRows[date].forEach(row => populateRowSelect(row, ALL_TRUCKS, ALL_SUBCONS, []));
                     return;
                 }
 
                 if (truckCacheByDate[date]) {
                     const cached = truckCacheByDate[date];
-                    dateRows[date].forEach(row => populateRowSelect(row, cached.trucks, cached.subcons));
+                    dateRows[date].forEach(row => populateRowSelect(row, cached.trucks, cached.subcons, cached.temp_trucks || []));
                     return;
                 }
 
@@ -1045,10 +1064,10 @@
                     .then(r => r.json())
                     .then(data => {
                         truckCacheByDate[date] = data;
-                        dateRows[date].forEach(row => populateRowSelect(row, data.trucks, data.subcons));
+                        dateRows[date].forEach(row => populateRowSelect(row, data.trucks, data.subcons, data.temp_trucks || []));
                     })
                     .catch(() => {
-                        dateRows[date].forEach(row => populateRowSelect(row, ALL_TRUCKS, ALL_SUBCONS));
+                        dateRows[date].forEach(row => populateRowSelect(row, ALL_TRUCKS, ALL_SUBCONS, []));
                     });
             });
         }
@@ -1430,6 +1449,9 @@
                 </td>
                 <td class="sticky-col">
                     <input type="text" class="form-control form-control-sm" name="pick_point" placeholder="Pick Point" value="${escapeAttr(pickPoint)}" required>
+                    <input type="text" class="form-control form-control-sm mt-1" name="pick_address"
+                           list="pick_address_list_${id}" placeholder="Pick Address" value="${escapeAttr(pickAddress)}">
+                    <datalist id="pick_address_list_${id}"></datalist>
                 </td>
                 <td class="sticky-col">
                     <input name="consignee" list="edit_consignee_list_${id}" class="form-control form-control-sm"
@@ -1440,8 +1462,9 @@
                 </td>
                 <td class="sticky-col">
                     <input type="text" class="form-control form-control-sm" name="drop_point" placeholder="Drop Point" value="${escapeAttr(dropPoint)}" required>
-                    <input type="hidden" name="pick_address" value="${escapeAttr(pickAddress)}">
-                    <input type="hidden" name="drop_address" value="${escapeAttr(dropAddress)}">
+                    <input type="text" class="form-control form-control-sm mt-1" name="drop_address"
+                           list="drop_address_list_${id}" placeholder="Drop Address" value="${escapeAttr(dropAddress)}">
+                    <datalist id="drop_address_list_${id}"></datalist>
                 </td>
                 <td>
                     <select class="form-select form-select-sm" name="pick_truck_size">
@@ -1532,6 +1555,11 @@
                     }
                 });
 
+            // Pre-populate pick/drop address datalists with the customer's saved locations,
+            // without overwriting the row's existing values
+            if (consignor) fetchAndFillLocations(row, consignor, 'consignor', { overwriteValue: false });
+            if (consignee) fetchAndFillLocations(row, consignee, 'consignee', { overwriteValue: false });
+
             return row;
         }
 
@@ -1569,7 +1597,7 @@
                 return matchPick && matchDrop;
             }
 
-            function fillOptions(trucks, subcons) {
+            function fillOptions(trucks, subcons, tempTrucks) {
                 select.innerHTML = '<option value="">-</option>';
                 if (trucks && Array.isArray(trucks)) {
                     trucks.filter(isValid).forEach(t => {
@@ -1597,15 +1625,28 @@
                         select.appendChild(opt);
                     });
                 }
+                // ALL temp subcons for the date (no type/size filter), label switches once a real subcon is bound
+                if (tempTrucks && Array.isArray(tempTrucks)) {
+                    tempTrucks.forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t.truck_no;
+                        opt.textContent = (t.subcon_id && t.subcon_truck_no)
+                            ? t.subcon_truck_no + ' (Subcon)'
+                            : t.truck_no + ' (Temp)';
+                        if (t.truck_no === selectedTruck) opt.selected = true;
+                        select.appendChild(opt);
+                    });
+                }
             }
 
             if (!date) {
-                fillOptions(ALL_TRUCKS, ALL_SUBCONS);
+                fillOptions(ALL_TRUCKS, ALL_SUBCONS, []);
                 return;
             }
 
             if (truckCacheByDate[date]) {
-                fillOptions(truckCacheByDate[date].trucks, truckCacheByDate[date].subcons);
+                const cached = truckCacheByDate[date];
+                fillOptions(cached.trucks, cached.subcons, cached.temp_trucks || []);
                 return;
             }
 
@@ -1613,9 +1654,9 @@
                 .then(r => r.json())
                 .then(data => {
                     truckCacheByDate[date] = data;
-                    fillOptions(data.trucks, data.subcons);
+                    fillOptions(data.trucks, data.subcons, data.temp_trucks || []);
                 })
-                .catch(() => fillOptions(ALL_TRUCKS, ALL_SUBCONS));
+                .catch(() => fillOptions(ALL_TRUCKS, ALL_SUBCONS, []));
         }
 
         function recalculateStickyColumns() {
@@ -1715,6 +1756,9 @@
         </td>
         <td class="sticky-col">
             <input type="text" class="form-control form-control-sm" name="pick_point" placeholder="Pick Point" required>
+            <input type="text" class="form-control form-control-sm mt-1" name="pick_address"
+                   list="inline_pick_address_list" placeholder="Pick Address">
+            <datalist id="inline_pick_address_list"></datalist>
         </td>
         <td class="sticky-col">
             <input name="consignee" list="inline_consignee_list" class="form-control form-control-sm"
@@ -1725,8 +1769,9 @@
         </td>
         <td class="sticky-col">
             <input type="text" class="form-control form-control-sm" name="drop_point" placeholder="Drop Point" required>
-            <input type="hidden" name="pick_address">
-            <input type="hidden" name="drop_address">
+            <input type="text" class="form-control form-control-sm mt-1" name="drop_address"
+                   list="inline_drop_address_list" placeholder="Drop Address">
+            <datalist id="inline_drop_address_list"></datalist>
         </td>
         <td>
             <select class="form-select form-select-sm" name="pick_truck_size">
@@ -1841,8 +1886,10 @@
             });
         });
 
-        // Auto-fill pick/drop point when consignor/consignee is selected in inline edit rows
-        function fetchAndFillLocations(row, name, type) {
+        // Auto-fill pick/drop point when consignor/consignee is selected in inline edit rows.
+        // When overwriteValue is false (e.g. on edit-mode entry), the saved point/address/truck
+        // values are preserved — only the datalist of options is populated.
+        function fetchAndFillLocations(row, name, type, { overwriteValue = true } = {}) {
             if (!name) return;
 
             fetch(`/customers/${encodeURIComponent(name)}/locations`)
@@ -1855,38 +1902,41 @@
                         loc => loc.type && loc.type.toLowerCase() === typeFilter
                     );
 
-                    if (type === 'consignor') {
-                        const pointInput = row.querySelector('[name="pick_point"]');
-                        const addressInput = row.querySelector('[name="pick_address"]');
-                        const truckTypeSelect = row.querySelector('[name="pick_truck_type"]');
-                        const truckSizeSelect = row.querySelector('[name="pick_truck_size"]');
+                    const isPick = type === 'consignor';
+                    const pointInput = row.querySelector(isPick ? '[name="pick_point"]' : '[name="drop_point"]');
+                    const addressInput = row.querySelector(isPick ? '[name="pick_address"]' : '[name="drop_address"]');
+                    const truckTypeSelect = row.querySelector(isPick ? '[name="pick_truck_type"]' : '[name="drop_truck_type"]');
+                    const truckSizeSelect = row.querySelector(isPick ? '[name="pick_truck_size"]' : '[name="drop_truck_size"]');
 
-                        if (filtered.length > 0) {
-                            const loc = filtered[0];
-                            if (pointInput) pointInput.value = loc.pickup_dropoff_point ?? loc.state ?? '';
-                            if (addressInput) addressInput.value = loc.address ?? '';
-                            if (truckTypeSelect && loc.truck_type) truckTypeSelect.value = loc.truck_type;
-                            if (truckSizeSelect && loc.truck_size) truckSizeSelect.value = loc.truck_size;
-                        } else {
-                            if (pointInput) pointInput.value = '';
-                            if (addressInput) addressInput.value = '';
+                    // Populate the address datalist with every matching saved address
+                    if (addressInput) {
+                        const listId = addressInput.getAttribute('list');
+                        const datalist = listId ? row.querySelector(`#${CSS.escape(listId)}`) : null;
+                        if (datalist) {
+                            datalist.innerHTML = '';
+                            const seen = new Set();
+                            filtered.forEach(loc => {
+                                const addr = loc.address ?? '';
+                                if (!addr || seen.has(addr)) return;
+                                seen.add(addr);
+                                const opt = document.createElement('option');
+                                opt.value = addr;
+                                datalist.appendChild(opt);
+                            });
                         }
-                    } else if (type === 'consignee') {
-                        const pointInput = row.querySelector('[name="drop_point"]');
-                        const addressInput = row.querySelector('[name="drop_address"]');
-                        const truckTypeSelect = row.querySelector('[name="drop_truck_type"]');
-                        const truckSizeSelect = row.querySelector('[name="drop_truck_size"]');
+                    }
 
-                        if (filtered.length > 0) {
-                            const loc = filtered[0];
-                            if (pointInput) pointInput.value = loc.pickup_dropoff_point ?? loc.state ?? '';
-                            if (addressInput) addressInput.value = loc.address ?? '';
-                            if (truckTypeSelect && loc.truck_type) truckTypeSelect.value = loc.truck_type;
-                            if (truckSizeSelect && loc.truck_size) truckSizeSelect.value = loc.truck_size;
-                        } else {
-                            if (pointInput) pointInput.value = '';
-                            if (addressInput) addressInput.value = '';
-                        }
+                    if (!overwriteValue) return;
+
+                    if (filtered.length > 0) {
+                        const loc = filtered[0];
+                        if (pointInput) pointInput.value = loc.pickup_dropoff_point ?? loc.state ?? '';
+                        if (addressInput) addressInput.value = loc.address ?? '';
+                        if (truckTypeSelect && loc.truck_type) truckTypeSelect.value = loc.truck_type;
+                        if (truckSizeSelect && loc.truck_size) truckSizeSelect.value = loc.truck_size;
+                    } else {
+                        if (pointInput) pointInput.value = '';
+                        if (addressInput) addressInput.value = '';
                     }
                 })
                 .catch(err => console.error('Error fetching locations:', err));

@@ -41,8 +41,8 @@
                     <label for="team" class="form-label">Team</label>
                     <select name="team" class="form-select" id="team">
                         <option value="" selected disabled>-- Select Team --</option>
-                        <option value="A">A</option>
-                        <option value="B">B</option>
+                        <option value="MY">MY Team</option>
+                        <option value="SG">SG Team</option>
                     </select>
                 </div>
 

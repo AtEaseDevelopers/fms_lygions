@@ -255,8 +255,8 @@
                         <div class="mb-3">
                             <label class="form-label fw-bold">Truck Team:</label>
                             <select class="form-select">
-                                <option>1</option>
-                                <option>2</option>
+                                <option value="MY">MY Team</option>
+                                <option value="SG">SG Team</option>
                             </select>
                         </div>
                         <div class="mb-3">

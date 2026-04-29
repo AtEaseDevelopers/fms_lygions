@@ -11,11 +11,31 @@ class DriverHolidayController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $holidays = DriverHoliday::with('driver')->latest()->get();
+        $allowedSorts = ['start_date', 'end_date', 'created_at'];
+        $sortBy = in_array($request->query('sort_by'), $allowedSorts, true)
+            ? $request->query('sort_by')
+            : 'start_date';
+        $sortOrder = $request->query('sort_order') === 'asc' ? 'asc' : 'desc';
+        $search = $request->query('search');
+        $perPage = (int) $request->input('per_page', 10);
+
+        $holidays = DriverHoliday::with('driver')
+            ->when($search, function ($query, $search) {
+                $driverIds = Driver::where('name', 'like', "%{$search}%")->pluck('id');
+                $query->where(function ($q) use ($search, $driverIds) {
+                    $q->where('remarks', 'like', "%{$search}%")
+                        ->orWhereIn('driver_id', $driverIds);
+                });
+            })
+            ->orderBy($sortBy, $sortOrder)
+            ->paginate($perPage)
+            ->appends($request->query());
+
         $drivers = Driver::all();
-        return view('master-data.truck.driver-holiday', compact('holidays', 'drivers'));
+
+        return view('master-data.truck.driver-holiday', compact('holidays', 'drivers', 'search'));
     }
 
     /**
