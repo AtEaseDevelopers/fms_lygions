@@ -128,8 +128,12 @@
                     <tr class="text-center small">
                         <th colspan="2"></th>
                         @foreach ($dates as $date)
+                            @php
+                                $truckHeaderKey = \Carbon\Carbon::parse($date['date'])->format('Y-m-d');
+                                $truckHeaderUsed = (float) ($truckDateMatrix[$truckHeaderKey]['used_capacity'] ?? 0);
+                            @endphp
                             <th class="text-muted fw-normal">
-                                {{ number_format($date['MY']['balance'] ?? 0, 1) }}
+                                {{ number_format($truckHeaderUsed, 1) }}
                             </th>
                         @endforeach
                     </tr>

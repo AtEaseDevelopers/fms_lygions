@@ -91,22 +91,25 @@ class SubconController extends Controller
 
             $data = $response->json();
 
-            $snlSizesByNumber = DB::connection('snl')
+            $snlByNumber = DB::connection('snl')
                 ->table('lorries')
                 ->where('is_outsider', true)
-                ->pluck('size', 'number');
+                ->get(['number', 'size', 'group', 'floor_space'])
+                ->keyBy('number');
 
             $processed = 0;
             foreach ($data['subcons'] as $item) {
+                $snlRow = $snlByNumber->get($item['number']);
+
                 Subcon::updateOrCreate(
                     ['lygion_id' => $item['id']],
                     [
                         'subcon_name' => null,
                         'truck_no' => $item['number'],
-                        'group' => $item['group'],
-                        'size' => $this->normalizeSnlSize($snlSizesByNumber[$item['number']] ?? null),
+                        'group' => $snlRow->group ?? $item['group'],
+                        'size' => $this->normalizeSnlSize($snlRow->size ?? null),
                         'tonnage' => $item['tonnage'] ?? 0,
-                        'floor_space' => $item['floor_space'] ?? 0,
+                        'floor_space' => $snlRow->floor_space ?? $item['floor_space'] ?? 0,
                         'chassis_type' => $item['chassis_type'] ?? null,
                         'phone_my' => null,
                         'phone_sg' => null,

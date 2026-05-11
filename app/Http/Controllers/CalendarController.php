@@ -110,6 +110,19 @@ class CalendarController extends Controller
 
         $tempMatrix = $this->buildTempTruckMatrix($dates, $startDateStr, $endDateStr, $consignmentMap, $unitsMap);
 
+        // Truck calendar header used capacity (MY), mirroring temp subcon top-row calc:
+        // sum used_capacity across every truck-date cell without filtering by status.
+        $truckDateMatrix = [];
+        foreach ($dates as $d) {
+            $truckDateMatrix[$d['date']->format('Y-m-d')] = ['used_capacity' => 0.0];
+        }
+        foreach ($calendarMatrix as $truckNumber => $truckDates) {
+            foreach ($truckDates as $dateKey => $day) {
+                if (!isset($truckDateMatrix[$dateKey])) continue;
+                $truckDateMatrix[$dateKey]['used_capacity'] += (float) ($day['MY']['used_capacity'] ?? 0);
+            }
+        }
+
         // Temp subcon capacity sums (MY only, mirroring the existing truck cards)
         $tempTotalMy = 0.0;
         $tempUsedMy = 0.0;
@@ -155,6 +168,7 @@ class CalendarController extends Controller
             'tempUsedMy' => $tempUsedMy,
             'tempUtilizationMy' => $tempUtilizationMy,
             'tempDateMatrix' => $tempDateMatrix,
+            'truckDateMatrix' => $truckDateMatrix,
             'combinedTotal' => $combinedTotal,
             'combinedUsed' => $combinedUsed,
             'combinedUtilization' => $combinedUtilization,
@@ -200,10 +214,13 @@ class CalendarController extends Controller
             $consKey = $t->label . '-' . $dateKey;
             $dayCons = $consignmentMap->get($consKey) ?? collect();
 
-            // Filter by location: MY = pick_point != Singapore, SG = pick_point == Singapore
-            $matchingCons = $t->location === 'SG'
-                ? $dayCons->where('pick_point', 'Singapore')
-                : $dayCons->where('pick_point', '!=', 'Singapore');
+            // Without a subcon, the slot has no real truck backing it, so suppress
+            // its consignors/usage instead of leaking stale rows into the cell.
+            $matchingCons = $t->subcon_id
+                ? ($t->location === 'SG'
+                    ? $dayCons->where('pick_point', 'Singapore')
+                    : $dayCons->where('pick_point', '!=', 'Singapore'))
+                : collect();
 
             if (!isset($matrix[$t->label][$t->location])) {
                 $matrix[$t->label][$t->location] = [
