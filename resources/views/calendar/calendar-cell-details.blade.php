@@ -22,7 +22,6 @@
                     <th>Type / Size</th>
                     <td>{{ $tempMeta['chassis_type'] ?? '-' }} / {{ $tempMeta['size'] ?? '-' }}</td>
                 </tr>
-                @if (count($consignors) > 0 || !empty($assignedSubcon))
                 <tr>
                     <th>Subcon</th>
                     <td>
@@ -65,7 +64,6 @@
                         </small>
                     </td>
                 </tr>
-                @endif
                 <tr>
                     <th>Consignors</th>
                     <td>

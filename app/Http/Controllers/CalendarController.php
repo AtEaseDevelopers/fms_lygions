@@ -493,14 +493,20 @@ class CalendarController extends Controller
         $location = $temp->location;
         $truckNumber = $temp->label;
 
-        $consignments = Consignment::with('driverInfo')
-            ->where('truck_number', $temp->label)
-            ->whereDate('load_date', $date)
-            ->get();
+        // Mirror buildTempTruckMatrix: without a subcon the slot has no real truck
+        // backing it, so the modal should not surface stale consignors either.
+        if ($temp->subcon_id) {
+            $consignments = Consignment::with('driverInfo')
+                ->where('truck_number', $temp->label)
+                ->whereDate('load_date', $date)
+                ->get();
 
-        $consignments = $location === 'SG'
-            ? $consignments->where('pick_point', 'Singapore')
-            : $consignments->where('pick_point', '!=', 'Singapore');
+            $consignments = $location === 'SG'
+                ? $consignments->where('pick_point', 'Singapore')
+                : $consignments->where('pick_point', '!=', 'Singapore');
+        } else {
+            $consignments = collect();
+        }
 
         $consignors = $consignments->map(fn($c) => [
             'name' => $c->consignor,
@@ -517,11 +523,12 @@ class CalendarController extends Controller
             'size' => $temp->size,
         ];
 
-        // Strict filter on size; chassis_type 'any' acts as a wildcard.
+        // "any"/"Any" acts as a wildcard on both chassis_type and size.
         // No exclusion of subcons already assigned elsewhere — the same subcon can back multiple cells.
+        $isAny = fn($v) => $v !== null && strcasecmp((string) $v, 'any') === 0;
         $candidateSubcons = Subcon::query()
-            ->when($temp->chassis_type !== 'any', fn($q) => $q->where('chassis_type', $temp->chassis_type))
-            ->where('size', $temp->size)
+            ->when(!$isAny($temp->chassis_type), fn($q) => $q->where('chassis_type', $temp->chassis_type))
+            ->when(!$isAny($temp->size), fn($q) => $q->where('size', $temp->size))
             ->orderBy('truck_no')
             ->get();
 
