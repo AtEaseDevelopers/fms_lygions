@@ -945,6 +945,12 @@
             return (val || '').toString().trim().toLowerCase();
         }
 
+        // Strip legacy " (Temp)" / " (Subcon)" suffix from a saved truck_number so it
+        // matches the canonical option value (just the label/truck_no).
+        function stripTruckSuffix(value) {
+            return (value || '').toString().replace(/\s*\((?:Temp|Subcon)\)\s*$/i, '');
+        }
+
         function isValidTruck(truck, pickType, pickSize, dropType, dropSize) {
             // chassis_type is mandatory
             if (!truck.chassis_type) return false;
@@ -983,7 +989,7 @@
             const pickSize = normalize(row.dataset.pickSize);
             const dropType = normalize(row.dataset.dropType);
             const dropSize = normalize(row.dataset.dropSize);
-            const selectedTruck = row.dataset.selectedTruck;
+            const selectedTruck = stripTruckSuffix(row.dataset.selectedTruck);
 
             const select = row.querySelector('.truck-number-select');
             if (!select) return;
@@ -1579,6 +1585,8 @@
             const select = row.querySelector('[name="truck_number"]');
             if (!select) return;
 
+            selectedTruck = stripTruckSuffix(selectedTruck);
+
             const normalize = v => (v || '').toString().trim().toLowerCase();
             const pickType = normalize(row.querySelector('[name="pick_truck_type"]')?.value);
             const pickSize = normalize(row.querySelector('[name="pick_truck_size"]')?.value);
@@ -1620,14 +1628,6 @@
                         select.appendChild(opt);
                     });
                 }
-                // Ensure currently assigned truck stays in list even if it no longer matches
-                if (selectedTruck && !select.querySelector(`option[value="${selectedTruck}"]`)) {
-                    const opt = document.createElement('option');
-                    opt.value = selectedTruck;
-                    opt.textContent = selectedTruck;
-                    opt.selected = true;
-                    select.insertBefore(opt, select.options[1] || null);
-                }
                 if (subcons && Array.isArray(subcons)) {
                     subcons.filter(isValid).forEach(s => {
                         const opt = document.createElement('option');
@@ -1648,6 +1648,15 @@
                         if (t.truck_no === selectedTruck) opt.selected = true;
                         select.appendChild(opt);
                     });
+                }
+                // Ensure currently assigned truck stays in list even if it no longer matches
+                // (run last so it doesn't duplicate a temp-truck label that's already been appended).
+                if (selectedTruck && !select.querySelector(`option[value="${selectedTruck}"]`)) {
+                    const opt = document.createElement('option');
+                    opt.value = selectedTruck;
+                    opt.textContent = selectedTruck;
+                    opt.selected = true;
+                    select.insertBefore(opt, select.options[1] || null);
                 }
             }
 
@@ -2252,7 +2261,7 @@
             const pickSize = normalize(row.dataset.pickSize);
             const dropType = normalize(row.dataset.dropType);
             const dropSize = normalize(row.dataset.dropSize);
-            const selectedTruck = row.dataset.selectedTruck;
+            const selectedTruck = stripTruckSuffix(row.dataset.selectedTruck);
             const loadDate = row.dataset.loadDate || '';
 
             const select = row.querySelector('.truck-number-select');
@@ -2280,15 +2289,6 @@
                         select.appendChild(opt);
                     });
 
-                // Ensure currently assigned truck is always in the list
-                if (selectedTruck && !select.querySelector(`option[value="${selectedTruck}"]`)) {
-                    const opt = document.createElement('option');
-                    opt.value = selectedTruck;
-                    opt.textContent = selectedTruck;
-                    opt.selected = true;
-                    select.insertBefore(opt, select.options[1] || null);
-                }
-
                 subcons
                     .filter(s => isValidTruck(s, pickType, pickSize, dropType, dropSize))
                     .forEach(s => {
@@ -2308,6 +2308,16 @@
                     if (t.truck_no === selectedTruck) opt.selected = true;
                     select.appendChild(opt);
                 });
+
+                // Ensure currently assigned truck is always in the list (run last so it
+                // doesn't duplicate a temp-truck label that's already been appended).
+                if (selectedTruck && !select.querySelector(`option[value="${selectedTruck}"]`)) {
+                    const opt = document.createElement('option');
+                    opt.value = selectedTruck;
+                    opt.textContent = selectedTruck;
+                    opt.selected = true;
+                    select.insertBefore(opt, select.options[1] || null);
+                }
             }
 
             if (loadDate && truckCacheByDate[loadDate]) {

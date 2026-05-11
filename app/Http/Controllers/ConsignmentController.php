@@ -204,6 +204,13 @@ class ConsignmentController extends Controller
         return $trucks;
     }
 
+    private function normalizeTruckNumber(?string $value): ?string
+    {
+        if ($value === null) return null;
+        $trimmed = preg_replace('/\s*\((?:Temp|Subcon)\)\s*$/i', '', $value);
+        return $trimmed === '' ? null : $trimmed;
+    }
+
     public function getAvailableTrucks(Request $request)
     {
         $date = $request->input('date', now()->format('Y-m-d'));
@@ -395,7 +402,7 @@ class ConsignmentController extends Controller
             'pre_pick' => $request->pre_pick,
             'pick_truck_type' => $request->pick_truck_type,
             'drop_truck_type' => $request->drop_truck_type,
-            'truck_number' => $request->truck_number,
+            'truck_number' => $this->normalizeTruckNumber($request->truck_number),
             'pick_truck_size' => $request->pick_truck_size,
             'drop_truck_size' => $request->drop_truck_size,
             'quantity' => $quantityJson,
@@ -481,7 +488,7 @@ class ConsignmentController extends Controller
             'pre_pick' => $request->pre_pick,
             'pick_truck_type' => $request->pick_truck_type,
             'drop_truck_type' => $request->drop_truck_type,
-            'truck_number' => $request->truck_number,
+            'truck_number' => $this->normalizeTruckNumber($request->truck_number),
             'pick_truck_size' => $request->pick_truck_size,
             'drop_truck_size' => $request->drop_truck_size,
             'quantity' => $quantityJson,
@@ -549,6 +556,10 @@ class ConsignmentController extends Controller
         $data['unit'] = is_array($request->unit)
             ? json_encode($request->unit)
             : $request->unit;
+
+        if (array_key_exists('truck_number', $data)) {
+            $data['truck_number'] = $this->normalizeTruckNumber($data['truck_number']);
+        }
 
         $consignment->update($data);
 
@@ -619,7 +630,7 @@ class ConsignmentController extends Controller
             'pre_pick' => $request->pre_pick,
             'pick_truck_type' => $request->pick_truck_type,
             'drop_truck_type' => $request->drop_truck_type,
-            'truck_number' => $request->truck_number,
+            'truck_number' => $this->normalizeTruckNumber($request->truck_number),
             'pick_truck_size' => $request->pick_truck_size,
             'drop_truck_size' => $request->drop_truck_size,
             'quantity' => $quantityJson,
@@ -665,7 +676,7 @@ class ConsignmentController extends Controller
                 continue;
 
             $consignment->update([
-                'truck_number' => $orderData['truck_number'],
+                'truck_number' => $this->normalizeTruckNumber($orderData['truck_number']),
             ]);
         }
 
