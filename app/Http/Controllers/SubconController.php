@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Subcon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 class SubconController extends Controller
 {
@@ -89,6 +90,12 @@ class SubconController extends Controller
             }
 
             $data = $response->json();
+
+            $snlSizesByNumber = DB::connection('snl')
+                ->table('lorries')
+                ->where('is_outsider', true)
+                ->pluck('size', 'number');
+
             $processed = 0;
             foreach ($data['subcons'] as $item) {
                 Subcon::updateOrCreate(
@@ -97,7 +104,7 @@ class SubconController extends Controller
                         'subcon_name' => null,
                         'truck_no' => $item['number'],
                         'group' => $item['group'],
-                        'size' => $item['size_label'],
+                        'size' => $this->normalizeSnlSize($snlSizesByNumber[$item['number']] ?? null),
                         'tonnage' => $item['tonnage'] ?? 0,
                         'floor_space' => $item['floor_space'] ?? 0,
                         'chassis_type' => $item['chassis_type'] ?? null,
@@ -126,6 +133,21 @@ class SubconController extends Controller
                 ]
             ]);
         }
+    }
+
+    private function normalizeSnlSize($val): ?string
+    {
+        if ($val === null || $val === '') {
+            return null;
+        }
+        $s = strtolower((string) $val);
+        if (in_array($s, ['1', 'any'], true)) {
+            return 'Any';
+        }
+        if (in_array($s, ['2', 'small'], true)) {
+            return 'Small';
+        }
+        return null;
     }
 
     /**

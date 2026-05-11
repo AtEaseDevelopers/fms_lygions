@@ -361,9 +361,9 @@
                         icon: swalData.icon,
                         title: swalData.title,
                         text: swalData.text
+                    }).then(() => {
+                        location.reload();
                     });
-
-                    // Optionally, reload table via JS/AJAX here
                 })
                 .catch(err => {
                     let swalData = err.response?.data?.swal || {
