@@ -933,6 +933,14 @@
         const ALL_SUBCONS = @json($subcons);
         const truckCacheByDate = {};
 
+        function invalidateTruckCache(date) {
+            if (date) {
+                delete truckCacheByDate[date];
+            } else {
+                Object.keys(truckCacheByDate).forEach(k => delete truckCacheByDate[k]);
+            }
+        }
+
         function normalize(val) {
             return (val || '').toString().trim().toLowerCase();
         }
@@ -1536,8 +1544,12 @@
             // Re-populate truck select when load_date changes in inline edit
             const loadDateInput = row.querySelector('[name="load_date"]');
             if (loadDateInput) {
+                let lastLoadDate = loadDateInput.value || '';
                 loadDateInput.addEventListener('change', function() {
                     const currentTruck = row.querySelector('[name="truck_number"]')?.value || '';
+                    invalidateTruckCache(lastLoadDate);
+                    invalidateTruckCache(this.value);
+                    lastLoadDate = this.value || '';
                     populateInlineTruckSelect(row, this.value, currentTruck);
                 });
             }
@@ -2254,7 +2266,7 @@
                 return;
             }
 
-            function fillSelect(trucks, subcons) {
+            function fillSelect(trucks, subcons, tempTrucks) {
                 select.innerHTML = '<option value="">-</option>';
                 select.disabled = false;
 
@@ -2286,21 +2298,31 @@
                         if (s.truck_no === selectedTruck) opt.selected = true;
                         select.appendChild(opt);
                     });
+
+                (tempTrucks || []).forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.truck_no;
+                    opt.textContent = (t.subcon_id && t.subcon_truck_no)
+                        ? t.subcon_truck_no + ' (Subcon)'
+                        : t.truck_no + ' (Temp)';
+                    if (t.truck_no === selectedTruck) opt.selected = true;
+                    select.appendChild(opt);
+                });
             }
 
             if (loadDate && truckCacheByDate[loadDate]) {
                 const cached = truckCacheByDate[loadDate];
-                fillSelect(cached.trucks, cached.subcons);
+                fillSelect(cached.trucks, cached.subcons, cached.temp_trucks || []);
             } else if (loadDate) {
                 fetch(`/api/available-trucks?date=${loadDate}`)
                     .then(r => r.json())
                     .then(data => {
                         truckCacheByDate[loadDate] = data;
-                        fillSelect(data.trucks, data.subcons);
+                        fillSelect(data.trucks, data.subcons, data.temp_trucks || []);
                     })
-                    .catch(() => fillSelect(ALL_TRUCKS, ALL_SUBCONS));
+                    .catch(() => fillSelect(ALL_TRUCKS, ALL_SUBCONS, []));
             } else {
-                fillSelect(ALL_TRUCKS, ALL_SUBCONS);
+                fillSelect(ALL_TRUCKS, ALL_SUBCONS, []);
             }
         }
 

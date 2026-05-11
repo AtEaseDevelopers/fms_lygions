@@ -500,10 +500,10 @@ class CalendarController extends Controller
             'size' => $temp->size,
         ];
 
-        // Strict filter: only subcons whose chassis_type AND size match this temp's.
+        // Strict filter on size; chassis_type 'any' acts as a wildcard.
         // No exclusion of subcons already assigned elsewhere — the same subcon can back multiple cells.
         $candidateSubcons = Subcon::query()
-            ->where('chassis_type', $temp->chassis_type)
+            ->when($temp->chassis_type !== 'any', fn($q) => $q->where('chassis_type', $temp->chassis_type))
             ->where('size', $temp->size)
             ->orderBy('truck_no')
             ->get();

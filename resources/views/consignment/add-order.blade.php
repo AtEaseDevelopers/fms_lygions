@@ -547,6 +547,13 @@
         fetchAvailableTrucks(this.value);
     });
 
+    {
+        const loadDateEl = document.getElementById('load_date');
+        if (loadDateEl && loadDateEl.value) {
+            fetchAvailableTrucks(loadDateEl.value);
+        }
+    }
+
     function updateTruckNumbers() {
         const pickType = normalize(document.getElementById('pick_truck_type').value);
         const pickSize = normalize(document.getElementById('pick_truck_size').value);

@@ -740,6 +740,7 @@
                                     <label class="form-label">Truck Type</label>
                                     <select class="form-select form-select-sm" name="temp_chassis_type">
                                         <option value="">-- None --</option>
+                                        <option value="any">Any</option>
                                         <option value="curtain">Curtain</option>
                                         <option value="open">Open</option>
                                         <option value="box">Box</option>
