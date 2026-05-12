@@ -99,25 +99,32 @@
                         <th>Driver</th>
                         <td>
                             @php
-                                $drivers = \App\Models\Driver::all();
+                                $drivers = \App\Models\Driver::orderBy('name')->get();
+
+                                // Resolve the driver that should appear selected: the explicit
+                                // consignment.driver if any consignment has one, else the
+                                // truck's default driver from Driver.default_lorry_id.
+                                $assignedDriverName = $consignments
+                                    ->pluck('driver')
+                                    ->filter(fn ($v) => !empty(trim((string) $v)))
+                                    ->first();
+                                if (empty($assignedDriverName)) {
+                                    $truckRecord = \App\Models\Truck::where('number', $truckNumber)->first();
+                                    if ($truckRecord) {
+                                        $assignedDriverName = optional(
+                                            \App\Models\Driver::where('default_lorry_id', $truckRecord->id)->first()
+                                        )->name;
+                                    }
+                                }
+                                $assignedKey = strtolower(trim((string) $assignedDriverName));
                             @endphp
                             <select name="driver" class="form-select form-select-sm w-auto d-inline">
-                                @foreach ($consignments as $consignment)
-                                    @if ($consignment->driverInfo)
-                                        <option value="{{ $consignment->driverInfo->name }}" selected>
-                                            {{ $consignment->driverInfo->name }}
-                                            ({{ $consignment->driverInfo->phone_my ?? ($consignment->driverInfo->phone_sg ?? '-') }})
-                                        </option>
-                                    @endif
-                                @endforeach
-
-                                {{-- Add all other drivers from database that might not be in consignments --}}
+                                <option value="">— Unassigned —</option>
                                 @foreach ($drivers as $driver)
-                                    @if (!in_array($driver->name, $consignments->pluck('driver')->toArray()))
-                                        <option value="{{ $driver->name }}">
-                                            {{ $driver->name }} ({{ $driver->phone_my ?? ($driver->phone_sg ?? '-') }})
-                                        </option>
-                                    @endif
+                                    <option value="{{ $driver->name }}"
+                                        {{ strtolower(trim((string) $driver->name)) === $assignedKey ? 'selected' : '' }}>
+                                        {{ $driver->name }} ({{ $driver->phone_my ?? ($driver->phone_sg ?? '-') }})
+                                    </option>
                                 @endforeach
                             </select>
 

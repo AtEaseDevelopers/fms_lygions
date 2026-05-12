@@ -36,8 +36,10 @@ class TruckSummaryController extends Controller
             'consignment_no',
             'consignor',
             'pick_point',
+            'pick_address',
             'consignee',
             'drop_point',
+            'drop_address',
             'pick_truck_type',
             'drop_truck_type',
             'pick_time',
@@ -51,30 +53,34 @@ class TruckSummaryController extends Controller
             'status'
         )->get();
 
+        $dash = fn ($v) => ($v === null || $v === '' || $v === []) ? '-' : $v;
+
         // Group consignments by truck number
-        $csns = $consignments->groupBy('truck_number')->map(function ($group) {
-            return $group->map(function ($item) {
+        $csns = $consignments->groupBy('truck_number')->map(function ($group) use ($dash) {
+            return $group->map(function ($item) use ($dash) {
                 $quantity = json_decode($item->quantity, true);
                 $unit = json_decode($item->unit, true);
 
                 return [
-                    'number' => $item->consignment_no,
-                    'load_date' => $item->load_date,
-                    'consignor' => $item->consignor,
-                    'pick_point' => $item->pick_point,
-                    'consignee' => $item->consignee,
-                    'drop_point' => $item->drop_point,
-                    'pick_truck_type' => $item->pick_truck_type,
-                    'drop_truck_type' => $item->drop_truck_type,
-                    'pick_time' => $item->pick_time,
-                    'quantity' => is_array($quantity) ? implode(', ', $quantity) : $item->quantity,
-                    'unit' => is_array($unit) ? implode(', ', $unit) : $item->unit,
+                    'number' => $dash($item->consignment_no),
+                    'load_date' => $dash($item->load_date),
+                    'consignor' => $dash($item->consignor),
+                    'pick_point' => $dash($item->pick_point),
+                    'pick_address' => $dash($item->pick_address),
+                    'consignee' => $dash($item->consignee),
+                    'drop_point' => $dash($item->drop_point),
+                    'drop_address' => $dash($item->drop_address),
+                    'pick_truck_type' => $dash($item->pick_truck_type),
+                    'drop_truck_type' => $dash($item->drop_truck_type),
+                    'pick_time' => $dash($item->pick_time),
+                    'quantity' => $dash(is_array($quantity) ? implode(', ', $quantity) : $item->quantity),
+                    'unit' => $dash(is_array($unit) ? implode(', ', $unit) : $item->unit),
                     'pre_pick' => $item->pre_pick ? 'Yes' : 'No',
-                    'remarks' => $item->remarks,
-                    'pick_truck_size' => $item->pick_truck_size,
-                    'drop_truck_size' => $item->drop_truck_size,
-                    'truck_number' => $item->truck_number,
-                    'status' => $item->status,
+                    'remarks' => $dash($item->remarks),
+                    'pick_truck_size' => $dash($item->pick_truck_size),
+                    'drop_truck_size' => $dash($item->drop_truck_size),
+                    'truck_number' => $dash($item->truck_number),
+                    'status' => $dash($item->status),
                     'space_usage' => '-',
                 ];
             });

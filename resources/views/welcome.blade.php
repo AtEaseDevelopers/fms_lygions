@@ -14,7 +14,17 @@
 </style>
 
 <div class="container-fluid mt-3">
-    <div class="d-flex justify-content-end mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+        @if($unreadCount > 0)
+            <form method="POST" action="{{ route('notifications.read-all') }}" class="mb-0">
+                @csrf
+                <button type="submit" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-check2-all"></i> Mark all {{ $unreadCount }} alert{{ $unreadCount === 1 ? '' : 's' }} as read
+                </button>
+            </form>
+        @else
+            <span></span>
+        @endif
         <form method="GET" action="{{ route('dashboard.index') }}" class="d-flex align-items-center gap-2 mb-0" id="weekForm">
             <a href="?start_date={{ $prevStart }}" class="btn btn-outline-secondary btn-sm" title="Previous week">
                 <i class="bi bi-chevron-left"></i>
@@ -31,48 +41,6 @@
         </form>
     </div>
 
-    @if($unreadCount > 0)
-        <div class="card border-0 shadow-sm rounded-3 mb-3">
-            <div class="card-body p-3">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
-                        <h6 class="fw-bold mb-0">Alerts ({{ $unreadCount }})</h6>
-                    </div>
-                    <form method="POST" action="{{ route('notifications.read-all') }}" class="mb-0">
-                        @csrf
-                        <button type="submit" class="btn btn-sm btn-outline-secondary">Mark all as read</button>
-                    </form>
-                </div>
-                <ul class="list-group list-group-flush">
-                    @foreach($notifications as $n)
-                        <li class="list-group-item d-flex justify-content-between align-items-start gap-3 px-0">
-                            <div class="flex-grow-1">
-                                <div class="small text-muted">
-                                    {{ $n->created_at->format('d M Y H:i') }}
-                                    @if($n->affected_date)
-                                        · affected date {{ $n->affected_date->format('d M Y') }}
-                                    @endif
-                                </div>
-                                <div>{{ $n->message }}</div>
-                                @if($n->consignment)
-                                    <a class="small"
-                                       href="{{ url('/consignment-order') }}?search={{ urlencode($n->consignment->consignment_no) }}">
-                                        View {{ $n->consignment->consignment_no }}
-                                    </a>
-                                @endif
-                            </div>
-                            <form method="POST" action="{{ route('notifications.read', $n->id) }}" class="mb-0">
-                                @csrf
-                                <button type="submit" class="btn btn-sm btn-outline-primary">Mark read</button>
-                            </form>
-                        </li>
-                    @endforeach
-                </ul>
-            </div>
-        </div>
-    @endif
-
     <div class="d-flex flex-column gap-2">
         @foreach($cards as $c)
             @php
@@ -80,6 +48,11 @@
                 $bg   = $util >= 70 ? 'bg-danger' : ($util >= 30 ? 'bg-warning' : 'bg-success');
                 $txt  = $util >= 70 ? 'text-danger' : ($util >= 30 ? 'text-warning' : 'text-success');
                 $isToday = $c['day']->isToday();
+            @endphp
+            @php
+                $dayAlerts = $alertsByDate->get($c['day']->toDateString(), collect());
+                $unreadDay = $dayAlerts->whereNull('read_at');
+                $readDay   = $dayAlerts->whereNotNull('read_at');
             @endphp
             <div class="card dash-row shadow-sm border-0 rounded-3 {{ $isToday ? 'is-today' : '' }}">
                 <div class="card-body p-3 d-flex align-items-center flex-wrap gap-3">
@@ -132,7 +105,77 @@
                     @if($c['dayCapacity'] == 0)
                         <span class="text-muted small ms-2"><i class="bi bi-info-circle"></i> No active fleet</span>
                     @endif
+
+                    @if($unreadDay->isNotEmpty())
+                        <span class="badge bg-warning text-dark dash-num py-2 px-3" style="font-size:.85rem;">
+                            <i class="bi bi-exclamation-triangle-fill"></i> {{ $unreadDay->count() }} alert{{ $unreadDay->count() === 1 ? '' : 's' }}
+                        </span>
+                    @endif
                 </div>
+
+                @if($unreadDay->isNotEmpty())
+                    <div class="card-footer bg-warning-subtle border-0 p-3">
+                        <ul class="list-group list-group-flush">
+                            @foreach($unreadDay as $n)
+                                <li class="list-group-item bg-transparent d-flex justify-content-between align-items-start gap-3 px-0">
+                                    <div class="flex-grow-1">
+                                        <div class="small text-muted">{{ $n->created_at->format('d M Y H:i') }}</div>
+                                        <div>{{ $n->message }}</div>
+                                        @if($n->consignment)
+                                            <a class="small" href="{{ url('/consignment-order') }}?search={{ urlencode($n->consignment->consignment_no) }}">
+                                                View {{ $n->consignment->consignment_no }}
+                                            </a>
+                                        @endif
+                                    </div>
+                                    <form method="POST" action="{{ route('notifications.read', $n->id) }}" class="mb-0">
+                                        @csrf
+                                        <button type="submit" class="btn btn-sm btn-outline-primary">Mark read</button>
+                                    </form>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                @if($readDay->isNotEmpty())
+                    @php $rid = 'read-'.$c['day']->format('Ymd'); @endphp
+                    <div class="card-footer bg-light border-0 p-2">
+                        <button class="btn btn-sm btn-link text-muted text-decoration-none p-0"
+                                type="button" data-bs-toggle="collapse" data-bs-target="#{{ $rid }}"
+                                aria-expanded="false" aria-controls="{{ $rid }}">
+                            <i class="bi bi-clock-history"></i>
+                            Show {{ $readDay->count() }} dismissed
+                        </button>
+                        <div class="collapse mt-2" id="{{ $rid }}">
+                            <ul class="list-group list-group-flush">
+                                @foreach($readDay as $n)
+                                    <li class="list-group-item bg-transparent d-flex justify-content-between align-items-start gap-3 px-0 text-muted">
+                                        <div class="flex-grow-1">
+                                            <div class="small">
+                                                {{ $n->created_at->format('d M Y H:i') }}
+                                                @if($n->read_at)
+                                                    · dismissed {{ $n->read_at->format('d M Y H:i') }}
+                                                @endif
+                                            </div>
+                                            <div><s>{{ $n->message }}</s></div>
+                                            @if($n->consignment)
+                                                <a class="small" href="{{ url('/consignment-order') }}?search={{ urlencode($n->consignment->consignment_no) }}">
+                                                    View {{ $n->consignment->consignment_no }}
+                                                </a>
+                                            @endif
+                                        </div>
+                                        <form method="POST" action="{{ route('notifications.unread', $n->id) }}" class="mb-0">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-secondary">
+                                                <i class="bi bi-arrow-counterclockwise"></i> Restore
+                                            </button>
+                                        </form>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    </div>
+                @endif
             </div>
         @endforeach
     </div>

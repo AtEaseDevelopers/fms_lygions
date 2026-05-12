@@ -132,7 +132,7 @@
                                 $truckHeaderKey = \Carbon\Carbon::parse($date['date'])->format('Y-m-d');
                                 $truckHeaderUsed = (float) ($truckDateMatrix[$truckHeaderKey]['used_capacity'] ?? 0);
                             @endphp
-                            <th class="text-muted fw-normal">
+                            <th class="text-danger fw-bold">
                                 {{ number_format($truckHeaderUsed, 1) }}
                             </th>
                         @endforeach
@@ -216,23 +216,28 @@
                                         'empty' => 'background-color: #c3c2c2;',
                                         default => 'background-color: #c3c2c2;',
                                     };
+                                    $driverOnLeave = $dayStatuses['MY']['driver_on_leave'] ?? false;
                                 @endphp
-                                <td class="p-2 availability-cell" style="{{ $cellStyle }}"
+                                <td class="p-2 availability-cell @if ($driverOnLeave) border border-danger border-2 @endif"
+                                    style="{{ $cellStyle }}"
                                     data-truck="{{ $truck['number'] }}" data-location="MY" data-date="{{ $dateOnly }}"
                                     data-status="{{ $status }}"
                                     data-has-consignors="{{ $consignors->isNotEmpty() ? 'true' : 'false' }}">
+                                    @if ($driverOnLeave)
+                                        @php
+                                            $leaveDriverName = $dayStatuses['MY']['driver_name'] ?? 'Driver';
+                                            $leaveTooltip = '<div class="fw-bold text-danger">'
+                                                . e($leaveDriverName) . ' is on leave — please reassign</div>';
+                                        @endphp
+                                        <div class="text-center mb-1" data-bs-toggle="tooltip" data-bs-html="true"
+                                            data-bs-placement="top" title="{{ $leaveTooltip }}">
+                                            <span class="badge bg-danger d-block">On Leave</span>
+                                        </div>
+                                    @endif
                                     @if ($consignors->isNotEmpty())
                                         @php
                                             $count = $consignors->count();
-                                            $driverName = $dayStatuses['MY']['driver_name'] ?? null;
-
-                                            // Start tooltip
                                             $tooltip = '';
-
-                                            if (!empty($driverName)) {
-                                                $tooltip .= '<div class="fw-bold mb-1">' . e($driverName) . '</div>';
-                                            }
-
                                             if ($count > 0) {
                                                 $tooltip .= '<ul class="mb-0 ps-3">';
                                                 foreach ($consignors as $c) {
@@ -285,23 +290,28 @@
                                         'empty' => 'background-color: #c3c2c2;',
                                         default => 'background-color: #c3c2c2;',
                                     };
+                                    $driverOnLeave = $dayStatuses['SG']['driver_on_leave'] ?? false;
                                 @endphp
-                                <td class="p-2 availability-cell" style="{{ $cellStyle }}"
+                                <td class="p-2 availability-cell @if ($driverOnLeave) border border-danger border-2 @endif"
+                                    style="{{ $cellStyle }}"
                                     data-truck="{{ $truck['number'] }}" data-location="SG"
                                     data-date="{{ $dateOnly }}" data-status="{{ $status }}"
                                     data-has-consignors="{{ $consignors->isNotEmpty() ? 'true' : 'false' }}">
+                                    @if ($driverOnLeave)
+                                        @php
+                                            $leaveDriverName = $dayStatuses['SG']['driver_name'] ?? 'Driver';
+                                            $leaveTooltip = '<div class="fw-bold text-danger">'
+                                                . e($leaveDriverName) . ' is on leave — please reassign</div>';
+                                        @endphp
+                                        <div class="text-center mb-1" data-bs-toggle="tooltip" data-bs-html="true"
+                                            data-bs-placement="top" title="{{ $leaveTooltip }}">
+                                            <span class="badge bg-danger d-block">On Leave</span>
+                                        </div>
+                                    @endif
                                     @if ($consignors->isNotEmpty())
                                         @php
                                             $count = $consignors->count();
-                                            $driverName = $dayStatuses['SG']['driver_name'] ?? null;
-
-                                            // Start tooltip
                                             $tooltip = '';
-
-                                            if (!empty($driverName)) {
-                                                $tooltip .= '<div class="fw-bold mb-1">' . e($driverName) . '</div>';
-                                            }
-
                                             if ($count > 0) {
                                                 $tooltip .= '<ul class="mb-0 ps-3">';
                                                 foreach ($consignors as $c) {
@@ -412,8 +422,9 @@
                                 </td>
                             </tr>
                         @else
-                            @foreach ($tempMatrix as $label => $byLocation)
-                                @foreach ($byLocation as $loc => $entry)
+                            @foreach ($tempMatrix as $label => $byRow)
+                                @foreach ($byRow as $rowKey => $entry)
+                                    @php $loc = $entry['location']; @endphp
                                     <tr>
                                         <td class="align-middle"><strong>{{ $loc }}</strong></td>
                                         <td class="align-middle">{{ $entry['meta']['chassis_type'] }}</td>
@@ -739,39 +750,49 @@
                                 <small class="text-muted">Reserve placeholders by type/size; assign a real subcon later from the calendar.</small>
                             </div>
 
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <label class="form-label">Truck Type</label>
-                                    <select class="form-select form-select-sm" name="temp_chassis_type">
-                                        <option value="">-- None --</option>
-                                        <option value="any">Any</option>
-                                        <option value="curtain">Curtain</option>
-                                        <option value="open">Open</option>
-                                        <option value="box">Box</option>
-                                        <option value="tailgate">Tailgate</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Size</label>
-                                    <select class="form-select form-select-sm" name="temp_size">
-                                        <option value="">-- None --</option>
-                                        <option value="Any">Any</option>
-                                        <option value="Small">Small</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Quantity</label>
-                                    <input type="number" id="temp_qty" name="temp_qty" class="form-control form-control-sm"
-                                        min="0" max="20" value="0">
-                                </div>
-                                <div class="col-md-8">
-                                    <label class="form-label">Labels (temp truck numbers)</label>
-                                    <div id="tempLabelInputs" class="d-flex flex-wrap gap-2">
-                                        {{-- Inputs rendered by JS based on quantity --}}
+                            <div id="tempSubconRows">
+                                <div class="temp-subcon-row border rounded p-2 mb-2 position-relative" style="background:#fff; padding-right:32px !important;">
+                                    <button type="button" class="btn btn-sm btn-link text-danger removeTempRow p-0"
+                                        style="position:absolute; top:4px; right:8px; display:none; font-size:1.4rem; line-height:1; text-decoration:none; font-weight:bold;"
+                                        aria-label="Remove row">&times;</button>
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-md-5">
+                                            <label class="form-label">Truck Type</label>
+                                            <select class="form-select form-select-sm temp-type" name="temp_chassis_type[]">
+                                                <option value="">-- None --</option>
+                                                <option value="any">Any</option>
+                                                <option value="curtain">Curtain</option>
+                                                <option value="open">Open</option>
+                                                <option value="box">Box</option>
+                                                <option value="tailgate">Tailgate</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Size</label>
+                                            <select class="form-select form-select-sm temp-size" name="temp_size[]">
+                                                <option value="">-- None --</option>
+                                                <option value="Any">Any</option>
+                                                <option value="Small">Small</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">Quantity</label>
+                                            <input type="number" class="form-control form-control-sm temp-qty"
+                                                name="temp_qty[]" min="0" max="20" value="0">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label">Labels (temp truck numbers)</label>
+                                            <div class="tempLabelInputs d-flex flex-wrap gap-2">
+                                                {{-- Inputs rendered by JS based on quantity --}}
+                                            </div>
+                                            <small class="text-muted">Defaults to X1, X2, X3… continuing across rows — editable. Unique per (date, location).</small>
+                                        </div>
                                     </div>
-                                    <small class="text-muted">Defaults to X1, X2, X3… — editable. Unique per (date, location).</small>
                                 </div>
                             </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary addTempRow">
+                                + Add another type
+                            </button>
                         </div>
 
 
@@ -1320,36 +1341,84 @@
 
     // ========== Temporary Subcons (merged into Availability modal) ==========
     $(function() {
-        const $qty = $('#temp_qty');
-        const $labelsContainer = $('#tempLabelInputs');
+        const $rowsContainer = $('#tempSubconRows');
 
-        function renderLabelInputs() {
-            const qty = Math.max(0, Math.min(20, parseInt($qty.val(), 10) || 0));
-            const existing = $labelsContainer.find('input').map(function() {
-                return $(this).val();
-            }).get();
+        function renderAllLabels() {
+            let offset = 0;
+            $rowsContainer.find('.temp-subcon-row').each(function(rowIdx) {
+                const $row = $(this);
+                const $qty = $row.find('.temp-qty');
+                const $labels = $row.find('.tempLabelInputs');
+                const qty = Math.max(0, Math.min(20, parseInt($qty.val(), 10) || 0));
 
-            $labelsContainer.empty();
-            for (let i = 0; i < qty; i++) {
-                const defaultVal = existing[i] && existing[i].trim() !== '' ? existing[i] : ('X' + (i + 1));
-                const $input = $('<input>', {
-                    type: 'text',
-                    name: 'labels[]',
-                    class: 'form-control form-control-sm',
-                    placeholder: 'Label ' + (i + 1),
-                    value: defaultVal,
-                    maxlength: 50,
-                    required: true,
-                    style: 'width: 110px;',
-                });
-                $labelsContainer.append($input);
-            }
+                const existing = $labels.find('input').map(function() {
+                    return $(this).val();
+                }).get();
+
+                $labels.empty();
+                for (let i = 0; i < qty; i++) {
+                    const defaultVal = existing[i] && existing[i].trim() !== '' ?
+                        existing[i] :
+                        ('X' + (offset + i + 1));
+                    const $input = $('<input>', {
+                        type: 'text',
+                        name: 'labels[' + rowIdx + '][]',
+                        class: 'form-control form-control-sm',
+                        placeholder: 'Label ' + (offset + i + 1),
+                        value: defaultVal,
+                        maxlength: 50,
+                        required: true,
+                        style: 'width: 110px;',
+                    });
+                    $labels.append($input);
+                }
+                offset += qty;
+            });
         }
 
-        $qty.on('input change', renderLabelInputs);
+        function reindexRowNames() {
+            $rowsContainer.find('.temp-subcon-row').each(function(rowIdx) {
+                $(this).find('.tempLabelInputs input').each(function() {
+                    $(this).attr('name', 'labels[' + rowIdx + '][]');
+                });
+            });
+        }
+
+        function syncRemoveButtons() {
+            const $rows = $rowsContainer.find('.temp-subcon-row');
+            const showRemove = $rows.length > 1;
+            $rows.find('.removeTempRow').css('display', showRemove ? '' : 'none');
+        }
+
+        // Qty change → re-render all labels (because numbering is continuous)
+        $rowsContainer.on('input change', '.temp-qty', renderAllLabels);
+
+        // Add a new row
+        $('#tempSubconSection').on('click', '.addTempRow', function() {
+            const $first = $rowsContainer.find('.temp-subcon-row').first();
+            const $clone = $first.clone();
+            $clone.find('select').prop('selectedIndex', 0);
+            $clone.find('.temp-qty').val(0);
+            $clone.find('.tempLabelInputs').empty();
+            $rowsContainer.append($clone);
+            reindexRowNames();
+            renderAllLabels();
+            syncRemoveButtons();
+        });
+
+        // Remove a row
+        $rowsContainer.on('click', '.removeTempRow', function() {
+            const $rows = $rowsContainer.find('.temp-subcon-row');
+            if ($rows.length <= 1) return;
+            $(this).closest('.temp-subcon-row').remove();
+            reindexRowNames();
+            renderAllLabels();
+            syncRemoveButtons();
+        });
 
         $('#availabilityModal').on('show.bs.modal', function() {
-            renderLabelInputs();
+            renderAllLabels();
+            syncRemoveButtons();
         });
 
         // Click on a temp-truck cell → open detail modal (reuse #cellInfoModal)

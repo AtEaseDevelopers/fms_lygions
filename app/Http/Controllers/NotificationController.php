@@ -31,4 +31,18 @@ class NotificationController extends Controller
             'text' => 'All notifications marked as read.',
         ]);
     }
+
+    public function markUnread($id)
+    {
+        $notification = Notification::findOrFail($id);
+        if (!is_null($notification->read_at)) {
+            $notification->update(['read_at' => null]);
+        }
+
+        return back()->with('swal', [
+            'icon' => 'success',
+            'title' => 'Alert restored',
+            'text' => 'Notification moved back to active alerts.',
+        ]);
+    }
 }

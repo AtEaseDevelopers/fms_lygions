@@ -66,5 +66,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/customers/{name}/locations', [ConsignmentController::class, 'getCustomerLocations'])->name('customers.locations');
     Route::get('/api/available-trucks', [ConsignmentController::class, 'getAvailableTrucks'])->name('api.available-trucks');
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+    Route::post('/notifications/{id}/unread', [NotificationController::class, 'markUnread'])->name('notifications.unread');
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
 });

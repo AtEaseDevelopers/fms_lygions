@@ -189,11 +189,12 @@
                 </div>
                 <div class="card-body row g-3">
                     <div class="col-md-3"><label class="form-label">Load Date:</label><input type="text" class="form-control" value="${csn.load_date}" readonly></div>
-                    <div class="col-md-3"><label class="form-label">Consignment No.:</label><input type="text" class="form-control" value="${csn.consignment_no}" readonly></div>
                     <div class="col-md-3"><label class="form-label">Consignor:</label><input type="text" class="form-control" value="${csn.consignor}" readonly></div>
                     <div class="col-md-3"><label class="form-label">Pick Point:</label><input type="text" class="form-control" value="${csn.pick_point}" readonly></div>
+                    <div class="col-md-3"><label class="form-label">Pick Address:</label><input type="text" class="form-control" value="${csn.pick_address}" readonly></div>
                     <div class="col-md-3"><label class="form-label">Consignee:</label><input type="text" class="form-control" value="${csn.consignee}" readonly></div>
                     <div class="col-md-3"><label class="form-label">Drop Point:</label><input type="text" class="form-control" value="${csn.drop_point}" readonly></div>
+                    <div class="col-md-3"><label class="form-label">Drop Address:</label><input type="text" class="form-control" value="${csn.drop_address}" readonly></div>
                     <div class="col-md-3"><label class="form-label">Pick Truck Size:</label><input type="text" class="form-control" value="${csn.pick_truck_size}" readonly></div>
                     <div class="col-md-3"><label class="form-label">Drop Truck Size:</label><input type="text" class="form-control" value="${csn.drop_truck_size}" readonly></div>
                     <div class="col-md-3"><label class="form-label">Remarks:</label><input type="text" class="form-control" value="${csn.remarks}" readonly></div>

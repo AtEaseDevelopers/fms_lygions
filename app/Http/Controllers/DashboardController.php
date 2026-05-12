@@ -80,11 +80,14 @@ class DashboardController extends Controller
             ];
         });
 
-        $notifications = Notification::unread()
+        $weekAlerts = Notification::with(['consignment', 'trigger'])
+            ->whereNotNull('affected_date')
+            ->whereBetween('affected_date', [$startStr, $endStr])
             ->latest()
-            ->limit(20)
-            ->with(['consignment', 'trigger'])
             ->get();
+
+        $alertsByDate = $weekAlerts->groupBy(fn($n) => Carbon::parse($n->affected_date)->toDateString());
+
         $unreadCount = Notification::unread()->count();
 
         return view('welcome', [
@@ -93,7 +96,7 @@ class DashboardController extends Controller
             'rangeEnd' => $end,
             'prevStart' => $prevStart,
             'nextStart' => $nextStart,
-            'notifications' => $notifications,
+            'alertsByDate' => $alertsByDate,
             'unreadCount' => $unreadCount,
         ]);
     }

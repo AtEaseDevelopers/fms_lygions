@@ -470,7 +470,7 @@
                                         </td> --}}
                                         <td>
                                             <div class="d-flex align-items-center gap-1">
-                                                <select class="form-select form-select-sm truck-number-select">
+                                                <select class="form-select form-select-sm truck-number-select" disabled>
                                                     <option value=""></option>
                                                 </select>
                                                 @if(in_array($order->id, $affectedIds ?? []))
@@ -1000,7 +1000,7 @@
 
             // Always start with the placeholder option, never short-circuit
             select.innerHTML = '<option value="">-</option>';
-            select.disabled = false;
+            select.disabled = true;
 
             // Add matching main trucks (only meaningful when criteria are set)
             if (hasCriteria) {
@@ -2277,7 +2277,7 @@
 
             function fillSelect(trucks, subcons, tempTrucks) {
                 select.innerHTML = '<option value="">-</option>';
-                select.disabled = false;
+                select.disabled = true;
 
                 trucks
                     .filter(t => isValidTruck(t, pickType, pickSize, dropType, dropSize))

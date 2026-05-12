@@ -10,6 +10,7 @@ use App\Models\Consignment;
 use Carbon\Carbon;
 use App\Models\Unit;
 use App\Models\Driver;
+use App\Models\DriverHoliday;
 use App\Models\Subcon;
 use App\Models\TemporaryTruck;
 use Illuminate\Support\Facades\DB;
@@ -43,8 +44,36 @@ class CalendarController extends Controller
         // cache units (space by unit)
         $unitsMap = Unit::all()->pluck('space', 'unit')->mapWithKeys(fn($v, $k) => [trim($k) => (float) $v]);
 
+        // Build driver-leave lookup: [driver_id][Y-m-d] => true for any DriverHoliday
+        // whose [start_date, end_date] overlaps the visible window.
+        $driverLeaveMap = [];
+        $leaves = DriverHoliday::where('start_date', '<=', $endDateStr)
+            ->where('end_date', '>=', $startDateStr)
+            ->get(['driver_id', 'start_date', 'end_date']);
+        $windowStart = Carbon::parse($startDateStr);
+        $windowEnd = Carbon::parse($endDateStr);
+        foreach ($leaves as $leave) {
+            $from = Carbon::parse($leave->start_date)->max($windowStart);
+            $to = Carbon::parse($leave->end_date)->min($windowEnd);
+            for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
+                $driverLeaveMap[$leave->driver_id][$d->format('Y-m-d')] = true;
+            }
+        }
+
+        // Driver name → id lookup, for cases where a consignment has an explicit driver name.
+        $driverIdByName = Driver::all(['id', 'name'])
+            ->mapWithKeys(fn ($d) => [strtolower(trim((string) $d->name)) => $d->id])
+            ->all();
+
+        // Each truck has a default driver via Driver.default_lorry_id. When a consignment
+        // has no explicit driver, this default driver is the effective driver for the cell
+        // and is what the on-leave check should match against.
+        $defaultDriverByTruckId = Driver::whereNotNull('default_lorry_id')
+            ->get(['id', 'name', 'default_lorry_id'])
+            ->keyBy('default_lorry_id');
+
         // now call buildCalendarMatrix with maps
-        [$calendarMatrix, $trucks] = $this->buildCalendarMatrix($dates, $truckMap, $availabilityMap, $consignmentMap, $unitsMap);
+        [$calendarMatrix, $trucks] = $this->buildCalendarMatrix($dates, $truckMap, $availabilityMap, $consignmentMap, $unitsMap, $driverLeaveMap, $driverIdByName, $defaultDriverByTruckId);
 
 
         $filteredMatrix = $this->filterCalendarMatrix($calendarMatrix);
@@ -130,9 +159,9 @@ class CalendarController extends Controller
         foreach ($dates as $d) {
             $tempDateMatrix[$d['date']->format('Y-m-d')] = ['total_capacity' => 0.0, 'used_capacity' => 0.0];
         }
-        foreach ($tempMatrix as $label => $byLocation) {
-            foreach ($byLocation as $loc => $entry) {
-                if ($loc !== 'MY') continue;
+        foreach ($tempMatrix as $label => $byRow) {
+            foreach ($byRow as $rowKey => $entry) {
+                if (($entry['location'] ?? null) !== 'MY') continue;
                 foreach ($entry['cells'] as $dateKey => $cell) {
                     $cellCapacity = (float) ($cell['subcon_capacity'] ?? 0);
                     $cellUsed = (float) ($cell['used_capacity'] ?? 0);
@@ -207,23 +236,27 @@ class CalendarController extends Controller
             return $used;
         };
 
-        // Shape: [label][location] => ['meta' => [...], 'cells' => [dateKey => cellData]]
+        // Shape: [label][rowKey] => ['location' => ..., 'meta' => [...], 'cells' => [dateKey => cellData]]
+        // rowKey = "location|chassis_type|size" so the same label with different
+        // type/size on different dates renders as separate rows (the unique DB
+        // constraint is per date+location+label only).
         $matrix = [];
         foreach ($temps as $t) {
             $dateKey = (new Carbon($t->date))->format('Y-m-d');
             $consKey = $t->label . '-' . $dateKey;
             $dayCons = $consignmentMap->get($consKey) ?? collect();
 
-            // Without a subcon, the slot has no real truck backing it, so suppress
-            // its consignors/usage instead of leaking stale rows into the cell.
             $matchingCons = $t->subcon_id
                 ? ($t->location === 'SG'
                     ? $dayCons->where('pick_point', 'Singapore')
                     : $dayCons->where('pick_point', '!=', 'Singapore'))
                 : collect();
 
-            if (!isset($matrix[$t->label][$t->location])) {
-                $matrix[$t->label][$t->location] = [
+            $rowKey = $t->location . '|' . $t->chassis_type . '|' . $t->size;
+
+            if (!isset($matrix[$t->label][$rowKey])) {
+                $matrix[$t->label][$rowKey] = [
+                    'location' => $t->location,
                     'meta' => [
                         'chassis_type' => $t->chassis_type,
                         'size' => $t->size,
@@ -234,7 +267,7 @@ class CalendarController extends Controller
 
             $subcon = $t->subcon_id ? $subconMap->get($t->subcon_id) : null;
 
-            $matrix[$t->label][$t->location]['cells'][$dateKey] = [
+            $matrix[$t->label][$rowKey]['cells'][$dateKey] = [
                 'id' => $t->id,
                 'consignors' => $matchingCons->pluck('consignor')->values(),
                 'consignment_count' => $matchingCons->count(),
@@ -339,7 +372,7 @@ class CalendarController extends Controller
             return $model ? (float) $model->space : 0;
         }, $unitStrings);
     }
-    private function buildCalendarMatrix($dates, $truckMap, $availabilityMap, $consignmentMap, $unitsMap)
+    private function buildCalendarMatrix($dates, $truckMap, $availabilityMap, $consignmentMap, $unitsMap, $driverLeaveMap = [], $driverIdByName = [], $defaultDriverByTruckId = null)
     {
         $trucks = Truck::where('is_outsider', 0)->get();
         $calendarMatrix = [];
@@ -347,6 +380,8 @@ class CalendarController extends Controller
         $parseToArray = fn($v) => $this->parseToArray($v);
 
         foreach ($trucks as $truck) {
+            $defaultDriver = $defaultDriverByTruckId ? $defaultDriverByTruckId->get($truck->id) : null;
+
             foreach ($dates as $date) {
                 $formattedDate = $date['date']->format('Y-m-d');
                 $key = $truck->number . '-' . $formattedDate;
@@ -382,22 +417,58 @@ class CalendarController extends Controller
                 $usedMy = $calcUsed($myConsignments);
                 $usedSg = $calcUsed($sgConsignments);
 
+                // Effective driver per cell = (1) consignment.driver name resolved to an id,
+                // else (2) the truck's default driver. The on-leave check matches against this id.
+                $myConsDriverRaw = (string) ($myConsignments->first()->driver ?? '');
+                $myConsKey = strtolower(trim($myConsDriverRaw));
+                $myConsDriverId = $myConsKey !== '' ? ($driverIdByName[$myConsKey] ?? null) : null;
+
+                if ($myConsDriverId !== null) {
+                    $myDriverId = $myConsDriverId;
+                    $myDriverName = $myConsDriverRaw;
+                } elseif ($defaultDriver) {
+                    $myDriverId = $defaultDriver->id;
+                    $myDriverName = $defaultDriver->name;
+                } else {
+                    $myDriverId = null;
+                    $myDriverName = null;
+                }
+                $myOnLeave = $myDriverId !== null && !empty($driverLeaveMap[$myDriverId][$formattedDate]);
+
+                $sgConsDriverRaw = (string) ($sgConsignments->first()->driver ?? '');
+                $sgConsKey = strtolower(trim($sgConsDriverRaw));
+                $sgConsDriverId = $sgConsKey !== '' ? ($driverIdByName[$sgConsKey] ?? null) : null;
+
+                if ($sgConsDriverId !== null) {
+                    $sgDriverId = $sgConsDriverId;
+                    $sgDriverName = $sgConsDriverRaw;
+                } elseif ($defaultDriver) {
+                    $sgDriverId = $defaultDriver->id;
+                    $sgDriverName = $defaultDriver->name;
+                } else {
+                    $sgDriverId = null;
+                    $sgDriverName = null;
+                }
+                $sgOnLeave = $sgDriverId !== null && !empty($driverLeaveMap[$sgDriverId][$formattedDate]);
+
                 $calendarMatrix[$truck->number][$formattedDate] = [
                     'MY' => [
                         'status' => $myAvailability->status ?? ($myConsignments->isNotEmpty() ? 'occupied' : 'empty'),
                         'consignors' => $myConsignments->pluck('consignor'),
                         'total_capacity' => optional($truck)->floor_space ?? 0,
                         'used_capacity' => $usedMy,
-                        'driver_name' => optional($myConsignments->first()?->driverInfo)->name,
-                        'driver_id' => optional($myConsignments->first()?->driverInfo)->id,
+                        'driver_name' => $myDriverName,
+                        'driver_id' => $myDriverId,
+                        'driver_on_leave' => $myOnLeave,
                     ],
                     'SG' => [
                         'status' => $sgAvailability->status ?? ($sgConsignments->isNotEmpty() ? 'occupied' : 'empty'),
                         'consignors' => $sgConsignments->pluck('consignor'),
                         'total_capacity' => optional($truck)->floor_space ?? 0,
                         'used_capacity' => $usedSg,
-                        'driver_name' => optional($sgConsignments->first()?->driverInfo)->name,
-                        'driver_id' => optional($sgConsignments->first()?->driverInfo)->id,
+                        'driver_name' => $sgDriverName,
+                        'driver_id' => $sgDriverId,
+                        'driver_on_leave' => $sgOnLeave,
                     ],
                 ];
             }
@@ -611,7 +682,9 @@ class CalendarController extends Controller
             foreach ($dates as $day) {
                 if (
                     ($day['MY']['status'] !== 'empty' || $day['MY']['consignors']->isNotEmpty()) ||
-                    ($day['SG']['status'] !== 'empty' || $day['SG']['consignors']->isNotEmpty())
+                    ($day['SG']['status'] !== 'empty' || $day['SG']['consignors']->isNotEmpty()) ||
+                    !empty($day['MY']['driver_on_leave']) ||
+                    !empty($day['SG']['driver_on_leave'])
                 )
                     return true;
             }
@@ -631,7 +704,7 @@ class CalendarController extends Controller
             'totalMyUsed' => $totMyUsed,
             'totalSgCapacity' => $totSgCap,
             'totalSgUsed' => $totSgUsed,
-            'myUtilization' => $totMyCap ? (($totMyCap - $totMyUsed) / $totMyCap) * 100 : 0,
+            'myUtilization' => $totMyCap ? ($totMyUsed / $totMyCap) * 100 : 0,
             'sgUtilization' => $totSgCap ? ($totSgUsed / $totSgCap) * 100 : 0,
         ];
     }
@@ -667,22 +740,42 @@ class CalendarController extends Controller
             'location' => 'required|string',
             'date' => 'nullable|date',
             'date_range' => 'nullable|string',
-            'temp_chassis_type' => 'nullable|string|max:50',
-            'temp_size' => 'nullable|string|max:50',
-            'temp_qty' => 'nullable|integer|min:0|max:50',
-            'labels' => 'nullable|array|max:50',
-            'labels.*' => 'nullable|string|max:50',
+            'temp_chassis_type' => 'nullable|array',
+            'temp_chassis_type.*' => 'nullable|string|max:50',
+            'temp_size' => 'nullable|array',
+            'temp_size.*' => 'nullable|string|max:50',
+            'temp_qty' => 'nullable|array',
+            'temp_qty.*' => 'nullable|integer|min:0|max:50',
+            'labels' => 'nullable|array',
+            'labels.*' => 'nullable|array|max:50',
+            'labels.*.*' => 'nullable|string|max:50',
         ]);
 
         $truckNumbers = $validated['truck_numbers'] ?? [];
-        $tempLabels = array_values(array_filter(
-            array_map(fn($l) => trim((string) $l), $validated['labels'] ?? []),
-            fn($l) => $l !== ''
-        ));
-        $tempType = $validated['temp_chassis_type'] ?? null;
-        $tempSize = $validated['temp_size'] ?? null;
 
-        if (empty($truckNumbers) && empty($tempLabels)) {
+        // Build $tempRows from parallel arrays. Each row: [type, size, labels[]].
+        // Skip rows with no non-empty labels (qty 0).
+        $tempTypes = $validated['temp_chassis_type'] ?? [];
+        $tempSizes = $validated['temp_size'] ?? [];
+        $tempLabelsByRow = $validated['labels'] ?? [];
+
+        $tempRows = [];
+        foreach ($tempTypes as $i => $type) {
+            $labels = array_values(array_filter(
+                array_map(fn($l) => trim((string) $l), $tempLabelsByRow[$i] ?? []),
+                fn($l) => $l !== ''
+            ));
+            if (empty($labels)) {
+                continue;
+            }
+            $tempRows[] = [
+                'type'   => $type,
+                'size'   => $tempSizes[$i] ?? null,
+                'labels' => $labels,
+            ];
+        }
+
+        if (empty($truckNumbers) && empty($tempRows)) {
             return back()->with('swal', [
                 'icon' => 'error',
                 'title' => 'Nothing to save',
@@ -804,7 +897,7 @@ class CalendarController extends Controller
 
         // Temporary subcons: only created when status=available with a date range
         $tempCreated = 0;
-        if (!empty($tempLabels)) {
+        if (!empty($tempRows)) {
             if ($status !== 'available') {
                 return back()->with('swal', [
                     'icon' => 'error',
@@ -812,13 +905,17 @@ class CalendarController extends Controller
                     'text' => 'Set status to Available (with a date range) to add temporary subcons.',
                 ]);
             }
-            if (empty($tempType) || empty($tempSize)) {
-                return back()->with('swal', [
-                    'icon' => 'error',
-                    'title' => 'Missing type or size',
-                    'text' => 'Select truck type and size for the temporary subcons.',
-                ]);
+
+            foreach ($tempRows as $idx => $row) {
+                if (empty($row['type']) || empty($row['size'])) {
+                    return back()->with('swal', [
+                        'icon' => 'error',
+                        'title' => 'Missing type or size',
+                        'text' => 'Select truck type and size for temporary subcon row ' . ($idx + 1) . '.',
+                    ]);
+                }
             }
+
             if (empty($validated['date_range'])) {
                 return back()->with('swal', [
                     'icon' => 'error',
@@ -827,7 +924,8 @@ class CalendarController extends Controller
                 ]);
             }
 
-            $duplicateLabels = array_diff_assoc($tempLabels, array_unique($tempLabels));
+            $allLabels = array_merge(...array_map(fn($r) => $r['labels'], $tempRows));
+            $duplicateLabels = array_diff_assoc($allLabels, array_unique($allLabels));
             if (!empty($duplicateLabels)) {
                 return back()->with('swal', [
                     'icon' => 'error',
@@ -854,7 +952,7 @@ class CalendarController extends Controller
 
             $existing = TemporaryTruck::whereIn('date', $tempDates)
                 ->where('location', $firstLocation)
-                ->whereIn('label', $tempLabels)
+                ->whereIn('label', $allLabels)
                 ->get();
             if ($existing->isNotEmpty()) {
                 $conflicts = $existing->map(fn($e) => $e->label . ' on ' . $e->date->format('Y-m-d'))->all();
@@ -866,18 +964,20 @@ class CalendarController extends Controller
             }
 
             try {
-                DB::transaction(function () use ($tempDates, $firstLocation, $tempLabels, $tempType, $tempSize, &$tempCreated) {
+                DB::transaction(function () use ($tempDates, $firstLocation, $tempRows, &$tempCreated) {
                     foreach ($tempDates as $date) {
-                        foreach ($tempLabels as $label) {
-                            TemporaryTruck::create([
-                                'date' => $date,
-                                'location' => $firstLocation,
-                                'chassis_type' => $tempType,
-                                'size' => $tempSize,
-                                'label' => $label,
-                                'floor_space' => null,
-                            ]);
-                            $tempCreated++;
+                        foreach ($tempRows as $row) {
+                            foreach ($row['labels'] as $label) {
+                                TemporaryTruck::create([
+                                    'date' => $date,
+                                    'location' => $firstLocation,
+                                    'chassis_type' => $row['type'],
+                                    'size' => $row['size'],
+                                    'label' => $label,
+                                    'floor_space' => null,
+                                ]);
+                                $tempCreated++;
+                            }
                         }
                     }
                 });
@@ -1005,12 +1105,14 @@ class CalendarController extends Controller
             'truck' => $request->input('truck'),
             'date' => $request->input('date'),
             'status' => $request->input('status'),
+            'driver' => $request->input('driver'),
         ]);
 
         $validated = $request->validate([
             'truck' => 'required|string',
             'date' => 'required|date',
             'status' => 'nullable|string',
+            'driver' => 'nullable|string',
         ]);
 
         // DEBUG: Log validated data
@@ -1039,6 +1141,19 @@ class CalendarController extends Controller
             \Log::info('Save Result', [
                 'saved' => $saved,
                 'current_status' => $availability->fresh()->status,
+            ]);
+        }
+
+        // Persist the explicit driver assignment to all consignments for this
+        // truck/date. The cell-details dropdown posts the driver's name string.
+        if (array_key_exists('driver', $validated)) {
+            $driverUpdated = Consignment::where('truck_number', $validated['truck'])
+                ->whereDate('load_date', $validated['date'])
+                ->update(['driver' => $validated['driver']]);
+
+            \Log::info('Driver Update', [
+                'driver' => $validated['driver'],
+                'rows_updated' => $driverUpdated,
             ]);
         }
 
