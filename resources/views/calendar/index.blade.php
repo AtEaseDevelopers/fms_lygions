@@ -208,14 +208,12 @@
                                     $consignors = $dayStatuses['MY']['consignors'];
                                     $dateOnly = \Carbon\Carbon::parse($dates[$loop->index]['date'])->format('Y-m-d');
 
-                                    $cellStyle = match ($status) {
-                                        'off-day' => 'background-color: #c3c2c2;',
-                                        'available' => 'background-color: #ffffff;',
-                                        'occupied' => 'background-color: #f7c6c7;',
-                                        'maintenance' => 'background-color: #c3c2c2;',
-                                        'empty' => 'background-color: #c3c2c2;',
-                                        default => 'background-color: #c3c2c2;',
-                                    };
+                                    $cellStyle = $consignors->isNotEmpty()
+                                        ? 'background-color: #f7c6c7;'
+                                        : match ($status) {
+                                            'available' => 'background-color: #ffffff;',
+                                            default => 'background-color: #c3c2c2;',
+                                        };
                                     $driverOnLeave = $dayStatuses['MY']['driver_on_leave'] ?? false;
                                 @endphp
                                 <td class="p-2 availability-cell @if ($driverOnLeave) border border-danger border-2 @endif"
@@ -282,14 +280,12 @@
                                     $consignors = $dayStatuses['SG']['consignors'];
                                     $dateOnly = \Carbon\Carbon::parse($dates[$loop->index]['date'])->format('Y-m-d');
 
-                                    $cellStyle = match ($status) {
-                                        'off-day' => 'background-color: #c3c2c2;',
-                                        'available' => 'background-color: #ffffff;',
-                                        'occupied' => 'background-color: #d1ecf1;',
-                                        'maintenance' => 'background-color: #c3c2c2;',
-                                        'empty' => 'background-color: #c3c2c2;',
-                                        default => 'background-color: #c3c2c2;',
-                                    };
+                                    $cellStyle = $consignors->isNotEmpty()
+                                        ? 'background-color: #d1ecf1;'
+                                        : match ($status) {
+                                            'available' => 'background-color: #ffffff;',
+                                            default => 'background-color: #c3c2c2;',
+                                        };
                                     $driverOnLeave = $dayStatuses['SG']['driver_on_leave'] ?? false;
                                 @endphp
                                 <td class="p-2 availability-cell @if ($driverOnLeave) border border-danger border-2 @endif"

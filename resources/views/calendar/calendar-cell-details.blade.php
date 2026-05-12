@@ -179,19 +179,18 @@
 
 
 
-        <!-- Update Button -->
-        @if ($consignments->count() == 0)
-            <input type="hidden" name="truck" value="{{ $truckNumber }}">
-            <input type="hidden" name="date" value="{{ $date }}">
-            <div class="text-end mt-2">
-               <button type="button"
+        <input type="hidden" name="truck" value="{{ $truckNumber }}">
+        <input type="hidden" name="date" value="{{ $date }}">
+        <div class="text-end mt-2">
+            @if ($consignments->count() == 0)
+                <button type="button"
                         class="btn btn-danger btn-sm"
                         onclick="handleDeleteAvailability('{{ $truckNumber }}', '{{ $date }}')">
                     Delete
                 </button>
-                <button type="submit" class="btn btn-primary btn-sm">Update</button>
-            </div>
-        @endif
+            @endif
+            <button type="submit" class="btn btn-primary btn-sm">Update</button>
+        </div>
     </form>
 </div>
 @endif

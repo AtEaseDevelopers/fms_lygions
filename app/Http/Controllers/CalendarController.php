@@ -417,39 +417,32 @@ class CalendarController extends Controller
                 $usedMy = $calcUsed($myConsignments);
                 $usedSg = $calcUsed($sgConsignments);
 
-                // Effective driver per cell = (1) consignment.driver name resolved to an id,
-                // else (2) the truck's default driver. The on-leave check matches against this id.
-                $myConsDriverRaw = (string) ($myConsignments->first()->driver ?? '');
-                $myConsKey = strtolower(trim($myConsDriverRaw));
-                $myConsDriverId = $myConsKey !== '' ? ($driverIdByName[$myConsKey] ?? null) : null;
+                // Effective driver applies to the whole truck/date — updateStatus writes the
+                // driver to every consignment for the truck/date regardless of MY/SG, and the
+                // cell-details modal reads them unfiltered. The on-leave indicator must match,
+                // otherwise a side with no consignments falls back to the truck's default
+                // driver even when the other side has been reassigned.
+                $consDriverRaw = (string) (
+                    $dayCons->pluck('driver')->filter(fn ($v) => trim((string) $v) !== '')->first() ?? ''
+                );
+                $consKey = strtolower(trim($consDriverRaw));
+                $consDriverId = $consKey !== '' ? ($driverIdByName[$consKey] ?? null) : null;
 
-                if ($myConsDriverId !== null) {
-                    $myDriverId = $myConsDriverId;
-                    $myDriverName = $myConsDriverRaw;
+                if ($consDriverId !== null) {
+                    $effDriverId = $consDriverId;
+                    $effDriverName = $consDriverRaw;
                 } elseif ($defaultDriver) {
-                    $myDriverId = $defaultDriver->id;
-                    $myDriverName = $defaultDriver->name;
+                    $effDriverId = $defaultDriver->id;
+                    $effDriverName = $defaultDriver->name;
                 } else {
-                    $myDriverId = null;
-                    $myDriverName = null;
+                    $effDriverId = null;
+                    $effDriverName = null;
                 }
-                $myOnLeave = $myDriverId !== null && !empty($driverLeaveMap[$myDriverId][$formattedDate]);
+                $onLeave = $effDriverId !== null && !empty($driverLeaveMap[$effDriverId][$formattedDate]);
 
-                $sgConsDriverRaw = (string) ($sgConsignments->first()->driver ?? '');
-                $sgConsKey = strtolower(trim($sgConsDriverRaw));
-                $sgConsDriverId = $sgConsKey !== '' ? ($driverIdByName[$sgConsKey] ?? null) : null;
-
-                if ($sgConsDriverId !== null) {
-                    $sgDriverId = $sgConsDriverId;
-                    $sgDriverName = $sgConsDriverRaw;
-                } elseif ($defaultDriver) {
-                    $sgDriverId = $defaultDriver->id;
-                    $sgDriverName = $defaultDriver->name;
-                } else {
-                    $sgDriverId = null;
-                    $sgDriverName = null;
-                }
-                $sgOnLeave = $sgDriverId !== null && !empty($driverLeaveMap[$sgDriverId][$formattedDate]);
+                $myDriverId = $sgDriverId = $effDriverId;
+                $myDriverName = $sgDriverName = $effDriverName;
+                $myOnLeave = $sgOnLeave = $onLeave;
 
                 $calendarMatrix[$truck->number][$formattedDate] = [
                     'MY' => [
