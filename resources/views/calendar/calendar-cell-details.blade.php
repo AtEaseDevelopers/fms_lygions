@@ -95,29 +95,39 @@
                     <td>{{ \Carbon\Carbon::parse($date)->format('d M Y') }}</td>
                 </tr>
                 @if ($availability?->status == null || $consignments->count() > 0)
+                    @php
+                        $drivers = \App\Models\Driver::where('is_outsider', 0)->orderBy('name')->get();
+
+                        // Resolve the driver that should appear selected: the explicit
+                        // consignment.driver if any consignment has one, else the
+                        // truck's default driver from Driver.default_lorry_id.
+                        $assignedDriverName = $consignments
+                            ->pluck('driver')
+                            ->filter(fn ($v) => !empty(trim((string) $v)))
+                            ->first();
+
+                        $truckRecord = \App\Models\Truck::where('number', $truckNumber)->first();
+                        $originalDriverName = $truckRecord
+                            ? optional(\App\Models\Driver::where('default_lorry_id', $truckRecord->id)->first())->name
+                            : null;
+
+                        if (empty($assignedDriverName)) {
+                            $assignedDriverName = $originalDriverName;
+                        }
+
+                        $assignedKey = strtolower(trim((string) $assignedDriverName));
+                        $originalKey = strtolower(trim((string) $originalDriverName));
+                        $isOverridden = $originalDriverName && $assignedKey !== '' && $assignedKey !== $originalKey;
+                    @endphp
+                    @if ($isOverridden)
+                        <tr>
+                            <th>Original Driver</th>
+                            <td>{{ $originalDriverName }}</td>
+                        </tr>
+                    @endif
                     <tr>
                         <th>Driver</th>
                         <td>
-                            @php
-                                $drivers = \App\Models\Driver::orderBy('name')->get();
-
-                                // Resolve the driver that should appear selected: the explicit
-                                // consignment.driver if any consignment has one, else the
-                                // truck's default driver from Driver.default_lorry_id.
-                                $assignedDriverName = $consignments
-                                    ->pluck('driver')
-                                    ->filter(fn ($v) => !empty(trim((string) $v)))
-                                    ->first();
-                                if (empty($assignedDriverName)) {
-                                    $truckRecord = \App\Models\Truck::where('number', $truckNumber)->first();
-                                    if ($truckRecord) {
-                                        $assignedDriverName = optional(
-                                            \App\Models\Driver::where('default_lorry_id', $truckRecord->id)->first()
-                                        )->name;
-                                    }
-                                }
-                                $assignedKey = strtolower(trim((string) $assignedDriverName));
-                            @endphp
                             <select name="driver" class="form-select form-select-sm w-auto d-inline">
                                 <option value="">— Unassigned —</option>
                                 @foreach ($drivers as $driver)

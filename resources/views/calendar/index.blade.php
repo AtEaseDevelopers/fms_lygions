@@ -25,6 +25,8 @@
             <form class="d-flex gap-3 align-items-stretch" style="width: 70%;" id="filterForm" method="GET"
                 action="{{ route('calendar.index') }}">
                 @csrf
+                <input type="hidden" name="days" value="{{ $days }}">
+                <input type="hidden" name="layout" value="{{ $layout ?? 'horizontal' }}">
 
                 <!-- Date Range -->
                 <div class="input-group">
@@ -72,7 +74,7 @@
             </form>
 
 
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 ms-auto justify-content-end align-items-center">
                 <!-- Toggle Switch Container -->
                 <div class="form-check form-switch d-flex align-items-center">
                     <label class="slider-toggle mb-0">
@@ -82,6 +84,16 @@
                     </label>
 
                 </div>
+
+                @if ($days === 7)
+                    <div class="form-check form-switch d-flex align-items-center">
+                        <label class="slider-toggle mb-0">
+                            <input type="checkbox" id="toggleVertical" {{ ($layout ?? 'horizontal') === 'vertical' ? 'checked' : '' }}>
+                            <span class="slider-text">{{ ($layout ?? 'horizontal') === 'vertical' ? 'Vertical' : 'Horizontal' }}</span>
+                            <span class="slider-knob"></span>
+                        </label>
+                    </div>
+                @endif
 
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#availabilityModal"
                     style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
@@ -125,227 +137,189 @@
         <div class="table-responsive">
             <table class="table text-left table-bordered " style="table-layout: fixed;">
                 <thead>
-                    <tr class="text-center small">
-                        <th colspan="2"></th>
-                        @foreach ($dates as $date)
-                            @php
-                                $truckHeaderKey = \Carbon\Carbon::parse($date['date'])->format('Y-m-d');
-                                $truckHeaderUsed = (float) ($truckDateMatrix[$truckHeaderKey]['used_capacity'] ?? 0);
-                            @endphp
-                            <th class="text-danger fw-bold">
-                                {{ number_format($truckHeaderUsed, 1) }}
-                            </th>
-                        @endforeach
-                    </tr>
-                    <tr class="text-center">
-                        <th rowspan="2">Truck Num</th>
-                        <th rowspan="2">
-                            Loc.</th>
-                        @foreach ($dates as $date)
-                            @php
-                                // --- Compute utilization rate for MY and SG ---
-                                $myUsed = $date['MY']['balance'] ?? 0;
-                                $sgUsed = $date['SG']['balance'] ?? 0;
-                                $totalCapacity = ($date['MY']['origin'] ?? 0) + ($date['SG']['origin'] ?? 0);
-
-                                $myRate = ($date['MY']['origin'] ?? 0) > 0 ? ($myUsed / ($date['MY']['origin'] ?? 0)) * 100 : 0;
-                                $sgRate = ($date['SG']['origin'] ?? 0) > 0 ? ($sgUsed / ($date['SG']['origin'] ?? 0)) * 100 : 0;
-
-                                // --- Determine colors ---
-                                $myColor =
-                                    $myRate > 70
+                    @if (($layout ?? 'horizontal') === 'vertical')
+                        <tr class="text-center small">
+                            <th rowspan="2" class="align-middle">Truck Num</th>
+                            @foreach ($dates as $date)
+                                @php
+                                    $truckHeaderKey = \Carbon\Carbon::parse($date['date'])->format('Y-m-d');
+                                    $truckHeaderUsed = (float) ($truckDateMatrix[$truckHeaderKey]['used_capacity'] ?? 0);
+                                @endphp
+                                <th colspan="2">
+                                    <div class="text-danger fw-bold">{{ number_format($truckHeaderUsed, 1) }}</div>
+                                    <div><strong>{{ \Carbon\Carbon::parse($date['date'])->format('D') }}</strong></div>
+                                    <div>{{ \Carbon\Carbon::parse($date['date'])->format('j/n') }}</div>
+                                </th>
+                            @endforeach
+                        </tr>
+                        <tr class="text-center small">
+                            @foreach ($dates as $date)
+                                @php
+                                    $myUsed = $date['MY']['balance'] ?? 0;
+                                    $sgUsed = $date['SG']['balance'] ?? 0;
+                                    $myRate = ($date['MY']['origin'] ?? 0) > 0 ? ($myUsed / ($date['MY']['origin'] ?? 0)) * 100 : 0;
+                                    $sgRate = ($date['SG']['origin'] ?? 0) > 0 ? ($sgUsed / ($date['SG']['origin'] ?? 0)) * 100 : 0;
+                                    $myColor = $myRate > 70
                                         ? 'text-danger fw-bold'
-                                        : ($myRate > 30
-                                            ? 'text-warning fw-bold'
-                                            : 'text-success fw-bold');
-                                $sgColor =
-                                    $sgRate > 70
+                                        : ($myRate > 30 ? 'text-warning fw-bold' : 'text-success fw-bold');
+                                    $sgColor = $sgRate > 70
                                         ? 'text-danger fw-bold'
-                                        : ($sgRate > 30
-                                            ? 'text-warning fw-bold'
-                                            : 'text-success fw-bold');
-                            @endphp
-                            <th>
-                                <div>
+                                        : ($sgRate > 30 ? 'text-warning fw-bold' : 'text-success fw-bold');
+                                @endphp
+                                <th>
+                                    <div><strong>MY</strong></div>
                                     <span
                                         class="{{ ($date['MY']['balance'] ?? 0) > ($date['MY']['origin'] ?? 0) ? 'text-danger' : '' }} {{ $myColor }}">
                                         {{ number_format(($date['MY']['origin'] ?? 0) - ($date['MY']['balance'] ?? 0), 1) }}
                                         <span style="color: black">/
                                             {{ number_format($date['MY']['origin'] ?? 0, 1) }}</span>
-
                                     </span>
-                                </div>
-                                <div hidden>
+                                </th>
+                                <th>
+                                    <div><strong>SG</strong></div>
                                     <span
                                         class="{{ ($date['SG']['balance'] ?? 0) > ($date['SG']['origin'] ?? 0) ? 'text-danger' : '' }} {{ $sgColor }}">
                                         {{ number_format(($date['SG']['origin'] ?? 0) - ($date['SG']['balance'] ?? 0), 1) }}
                                         <span style="color: black">/
                                             {{ number_format($date['SG']['origin'] ?? 0, 1) }}</span>
                                     </span>
-                                </div>
-                                <div>
-                                    <strong>{{ \Carbon\Carbon::parse($date['date'])->format('D') }}</strong>
-                                </div>
-                                <div>{{ \Carbon\Carbon::parse($date['date'])->format('j/n') }}</div>
-                            </th>
-                        @endforeach
+                                </th>
+                            @endforeach
+                        </tr>
+                    @else
+                        <tr class="text-center small">
+                            <th colspan="2"></th>
+                            @foreach ($dates as $date)
+                                @php
+                                    $truckHeaderKey = \Carbon\Carbon::parse($date['date'])->format('Y-m-d');
+                                    $truckHeaderUsed = (float) ($truckDateMatrix[$truckHeaderKey]['used_capacity'] ?? 0);
+                                @endphp
+                                <th class="text-danger fw-bold">
+                                    {{ number_format($truckHeaderUsed, 1) }}
+                                </th>
+                            @endforeach
+                        </tr>
+                        <tr class="text-center">
+                            <th rowspan="2">Truck Num</th>
+                            <th rowspan="2">
+                                Loc.</th>
+                            @foreach ($dates as $date)
+                                @php
+                                    $myUsed = $date['MY']['balance'] ?? 0;
+                                    $sgUsed = $date['SG']['balance'] ?? 0;
+                                    $totalCapacity = ($date['MY']['origin'] ?? 0) + ($date['SG']['origin'] ?? 0);
 
-                    </tr>
+                                    $myRate = ($date['MY']['origin'] ?? 0) > 0 ? ($myUsed / ($date['MY']['origin'] ?? 0)) * 100 : 0;
+                                    $sgRate = ($date['SG']['origin'] ?? 0) > 0 ? ($sgUsed / ($date['SG']['origin'] ?? 0)) * 100 : 0;
+
+                                    $myColor =
+                                        $myRate > 70
+                                            ? 'text-danger fw-bold'
+                                            : ($myRate > 30
+                                                ? 'text-warning fw-bold'
+                                                : 'text-success fw-bold');
+                                    $sgColor =
+                                        $sgRate > 70
+                                            ? 'text-danger fw-bold'
+                                            : ($sgRate > 30
+                                                ? 'text-warning fw-bold'
+                                                : 'text-success fw-bold');
+                                @endphp
+                                <th>
+                                    <div>
+                                        <span
+                                            class="{{ ($date['MY']['balance'] ?? 0) > ($date['MY']['origin'] ?? 0) ? 'text-danger' : '' }} {{ $myColor }}">
+                                            {{ number_format(($date['MY']['origin'] ?? 0) - ($date['MY']['balance'] ?? 0), 1) }}
+                                            <span style="color: black">/
+                                                {{ number_format($date['MY']['origin'] ?? 0, 1) }}</span>
+
+                                        </span>
+                                    </div>
+                                    <div hidden>
+                                        <span
+                                            class="{{ ($date['SG']['balance'] ?? 0) > ($date['SG']['origin'] ?? 0) ? 'text-danger' : '' }} {{ $sgColor }}">
+                                            {{ number_format(($date['SG']['origin'] ?? 0) - ($date['SG']['balance'] ?? 0), 1) }}
+                                            <span style="color: black">/
+                                                {{ number_format($date['SG']['origin'] ?? 0, 1) }}</span>
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <strong>{{ \Carbon\Carbon::parse($date['date'])->format('D') }}</strong>
+                                    </div>
+                                    <div>{{ \Carbon\Carbon::parse($date['date'])->format('j/n') }}</div>
+                                </th>
+                            @endforeach
+
+                        </tr>
+                    @endif
                 </thead>
 
                 <tbody>
 
-                    @foreach ($trucks as $truck)
-                        {{-- MY row --}}
-                        <tr>
-                            <td rowspan="2" class="fs-5 align-middle"><strong>{{ $truck['number'] }}</strong></td>
-                            <td><strong>MY</strong></td>
-                            @foreach ($calendarMatrix[$truck['number']] as $dayStatuses)
-                                @php
-                                    $status = $dayStatuses['MY']['status'];
-                                    $used_capacity = $dayStatuses['MY']['used_capacity'] ?? 0;
-                                    $total_capacity = $dayStatuses['MY']['total_capacity'] ?? 0;
-                                    $consignors = $dayStatuses['MY']['consignors'];
-                                    $dateOnly = \Carbon\Carbon::parse($dates[$loop->index]['date'])->format('Y-m-d');
+                    @if (($layout ?? 'horizontal') === 'vertical')
+                        @foreach ($trucks as $truck)
+                            <tr>
+                                <td class="fs-5 align-middle"><strong>{{ $truck['number'] }}</strong></td>
+                                @foreach ($calendarMatrix[$truck['number']] as $dayStatuses)
+                                    @php
+                                        $dateOnly = \Carbon\Carbon::parse($dates[$loop->index]['date'])->format('Y-m-d');
+                                    @endphp
+                                    @include('calendar._cell', [
+                                        'cellData' => $dayStatuses['MY'],
+                                        'truckNumber' => $truck['number'],
+                                        'location' => 'MY',
+                                        'dateOnly' => $dateOnly,
+                                    ])
+                                    @include('calendar._cell', [
+                                        'cellData' => $dayStatuses['SG'],
+                                        'truckNumber' => $truck['number'],
+                                        'location' => 'SG',
+                                        'dateOnly' => $dateOnly,
+                                    ])
+                                @endforeach
+                            </tr>
+                        @endforeach
+                    @else
+                        @foreach ($trucks as $truck)
+                            {{-- MY row --}}
+                            <tr>
+                                <td rowspan="2" class="fs-5 align-middle"><strong>{{ $truck['number'] }}</strong></td>
+                                <td><strong>MY</strong></td>
+                                @foreach ($calendarMatrix[$truck['number']] as $dayStatuses)
+                                    @php
+                                        $dateOnly = \Carbon\Carbon::parse($dates[$loop->index]['date'])->format('Y-m-d');
+                                    @endphp
+                                    @include('calendar._cell', [
+                                        'cellData' => $dayStatuses['MY'],
+                                        'truckNumber' => $truck['number'],
+                                        'location' => 'MY',
+                                        'dateOnly' => $dateOnly,
+                                    ])
+                                @endforeach
+                            </tr>
 
-                                    $cellStyle = $consignors->isNotEmpty()
-                                        ? 'background-color: #f7c6c7;'
-                                        : match ($status) {
-                                            'available' => 'background-color: #ffffff;',
-                                            default => 'background-color: #c3c2c2;',
-                                        };
-                                    $driverOnLeave = $dayStatuses['MY']['driver_on_leave'] ?? false;
-                                @endphp
-                                <td class="p-2 availability-cell @if ($driverOnLeave) border border-danger border-2 @endif"
-                                    style="{{ $cellStyle }}"
-                                    data-truck="{{ $truck['number'] }}" data-location="MY" data-date="{{ $dateOnly }}"
-                                    data-status="{{ $status }}"
-                                    data-has-consignors="{{ $consignors->isNotEmpty() ? 'true' : 'false' }}">
-                                    @if ($driverOnLeave)
-                                        @php
-                                            $leaveDriverName = $dayStatuses['MY']['driver_name'] ?? 'Driver';
-                                            $leaveTooltip = '<div class="fw-bold text-danger">'
-                                                . e($leaveDriverName) . ' is on leave — please reassign</div>';
-                                        @endphp
-                                        <div class="text-center mb-1" data-bs-toggle="tooltip" data-bs-html="true"
-                                            data-bs-placement="top" title="{{ $leaveTooltip }}">
-                                            <span class="badge bg-danger d-block">On Leave</span>
-                                        </div>
-                                    @endif
-                                    @if ($consignors->isNotEmpty())
-                                        @php
-                                            $count = $consignors->count();
-                                            $tooltip = '';
-                                            if ($count > 0) {
-                                                $tooltip .= '<ul class="mb-0 ps-3">';
-                                                foreach ($consignors as $c) {
-                                                    $tooltip .= '<li>' . e($c) . '</li>';
-                                                }
-                                                $tooltip .= '</ul>';
-                                            }
-                                        @endphp
-                                        <div class="mt-1 text-center consignor-info" data-bs-toggle="tooltip"
-                                            data-bs-html="true" data-bs-placement="top" title="{{ $tooltip }}">
-                                            <span class="badge bg-primary text-dark mb-1">
-                                                {{ number_format($total_capacity - $used_capacity, 1) }}/{{ number_format($total_capacity, 1) }}
-                                            </span>
-                                            <br>
-                                            <span class="badge bg-primary text-dark mb-0">
-                                                {{ $count }} consignor{{ $count > 1 ? 's' : '' }}
-                                            </span>
-                                        </div>
-                                    @endif
-                                    @if (in_array($status, ['off-day', 'maintenance']))
-                                        <div class="mt-1 text-center">
-                                            <span
-                                                class="badge
-                                                    @if ($status === 'off-day') bg-secondary
-                                                    @else bg-warning text-dark @endif mb-1">
-                                                {{ ucfirst($status) }}
-                                            </span>
-                                        </div>
-                                    @endif
-                                </td>
-                            @endforeach
-                        </tr>
-
-                        {{-- SG row --}}
-                        <tr>
-                            <td><strong>SG</strong></td>
-                            @foreach ($calendarMatrix[$truck['number']] as $dayStatuses)
-                                @php
-                                    $status = $dayStatuses['SG']['status'];
-                                    $used_capacity = $dayStatuses['SG']['used_capacity'] ?? 0;
-                                    $total_capacity = $dayStatuses['SG']['total_capacity'] ?? 0;
-                                    $consignors = $dayStatuses['SG']['consignors'];
-                                    $dateOnly = \Carbon\Carbon::parse($dates[$loop->index]['date'])->format('Y-m-d');
-
-                                    $cellStyle = $consignors->isNotEmpty()
-                                        ? 'background-color: #d1ecf1;'
-                                        : match ($status) {
-                                            'available' => 'background-color: #ffffff;',
-                                            default => 'background-color: #c3c2c2;',
-                                        };
-                                    $driverOnLeave = $dayStatuses['SG']['driver_on_leave'] ?? false;
-                                @endphp
-                                <td class="p-2 availability-cell @if ($driverOnLeave) border border-danger border-2 @endif"
-                                    style="{{ $cellStyle }}"
-                                    data-truck="{{ $truck['number'] }}" data-location="SG"
-                                    data-date="{{ $dateOnly }}" data-status="{{ $status }}"
-                                    data-has-consignors="{{ $consignors->isNotEmpty() ? 'true' : 'false' }}">
-                                    @if ($driverOnLeave)
-                                        @php
-                                            $leaveDriverName = $dayStatuses['SG']['driver_name'] ?? 'Driver';
-                                            $leaveTooltip = '<div class="fw-bold text-danger">'
-                                                . e($leaveDriverName) . ' is on leave — please reassign</div>';
-                                        @endphp
-                                        <div class="text-center mb-1" data-bs-toggle="tooltip" data-bs-html="true"
-                                            data-bs-placement="top" title="{{ $leaveTooltip }}">
-                                            <span class="badge bg-danger d-block">On Leave</span>
-                                        </div>
-                                    @endif
-                                    @if ($consignors->isNotEmpty())
-                                        @php
-                                            $count = $consignors->count();
-                                            $tooltip = '';
-                                            if ($count > 0) {
-                                                $tooltip .= '<ul class="mb-0 ps-3">';
-                                                foreach ($consignors as $c) {
-                                                    $tooltip .= '<li>' . e($c) . '</li>';
-                                                }
-                                                $tooltip .= '</ul>';
-                                            }
-                                        @endphp
-                                        <div class="mt-1 text-center consignor-info" data-bs-toggle="tooltip"
-                                            data-bs-html="true" data-bs-placement="top" title="{{ $tooltip }}">
-                                            <span class="badge bg-primary text-dark mb-1">
-                                                {{ number_format($total_capacity - $used_capacity, 1) }}/{{ number_format($total_capacity, 1) }}
-                                            </span>
-                                            <br>
-                                            <span class="badge bg-primary text-dark mb-0">
-                                                {{ $count }} consignor{{ $count > 1 ? 's' : '' }}
-                                            </span>
-                                        </div>
-                                    @endif
-                                    @if (in_array($status, ['off-day', 'maintenance']))
-                                        <div class="mt-1 text-center">
-                                            <span
-                                                class="badge
-                                                        @if ($status === 'off-day') bg-secondary
-                                                        @else bg-warning text-dark @endif mb-1">
-                                                {{ ucfirst($status) }}
-                                            </span>
-                                        </div>
-                                    @endif
-                                </td>
-                            @endforeach
-                        </tr>
-                    @endforeach
+                            {{-- SG row --}}
+                            <tr>
+                                <td><strong>SG</strong></td>
+                                @foreach ($calendarMatrix[$truck['number']] as $dayStatuses)
+                                    @php
+                                        $dateOnly = \Carbon\Carbon::parse($dates[$loop->index]['date'])->format('Y-m-d');
+                                    @endphp
+                                    @include('calendar._cell', [
+                                        'cellData' => $dayStatuses['SG'],
+                                        'truckNumber' => $truck['number'],
+                                        'location' => 'SG',
+                                        'dateOnly' => $dateOnly,
+                                    ])
+                                @endforeach
+                            </tr>
+                        @endforeach
+                    @endif
 
 
                     @if ($totalVisibleTrucks === 0)
                         <tr>
-                            <td colspan="{{ count($dates) + 2 }}" class="text-center py-4 text-muted">
+                            <td colspan="{{ ($layout ?? 'horizontal') === 'vertical' ? count($dates) * 2 + 1 : count($dates) + 2 }}" class="text-center py-4 text-muted">
                                 No truck activities found for this date range.
                             </td>
                         </tr>
@@ -777,11 +751,11 @@
                                                 name="temp_qty[]" min="0" max="20" value="0">
                                         </div>
                                         <div class="col-12">
-                                            <label class="form-label">Labels (temp truck numbers)</label>
-                                            <div class="tempLabelInputs d-flex flex-wrap gap-2">
+                                            <label class="form-label">Labels &amp; Floor Space</label>
+                                            <div class="tempLabelInputs d-flex flex-column gap-1">
                                                 {{-- Inputs rendered by JS based on quantity --}}
                                             </div>
-                                            <small class="text-muted">Defaults to X1, X2, X3… continuing across rows — editable. Unique per (date, location).</small>
+                                            <small class="text-muted">Labels default to X1, X2, X3… continuing across rows — editable. Unique per (date, location). Floor space is per label (m²) and feeds the temp calendar's daily capacity total; leave blank to skip.</small>
                                         </div>
                                     </div>
                                 </div>
@@ -906,6 +880,11 @@
         padding-left: 0 !important;
         min-width: 0;
     }
+
+    .availability-cell[draggable="true"] { cursor: grab; }
+    .availability-cell.dragging { opacity: 0.4; }
+    .availability-cell.drop-target-valid   { outline: 3px dashed #198754; outline-offset: -3px; }
+    .availability-cell.drop-target-invalid { outline: 3px dashed #dc3545; outline-offset: -3px; cursor: not-allowed; }
 </style>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
@@ -1136,6 +1115,123 @@
         updateSelectedCount();
         updateLabelColors();
 
+        // --- Drag-and-drop: move all consignments from one cell to another ---
+        let dragState = null;
+        let suppressClickUntil = 0;
+
+        // Bind BEFORE the modal-opening click handler so we can swallow the synthetic
+        // click that follows a drop. stopImmediatePropagation is required because the
+        // modal handler is also delegated on the same selector.
+        $(document).on('click', '.availability-cell', function(e) {
+            if (Date.now() < suppressClickUntil) {
+                e.stopImmediatePropagation();
+                return false;
+            }
+        });
+
+        $(document).on('dragstart', '.availability-cell[draggable="true"]', function(e) {
+            const $c = $(this);
+            if ($c.attr('data-has-consignors') !== 'true') { e.preventDefault(); return; }
+            dragState = {
+                truck:    $c.attr('data-truck'),
+                date:     $c.attr('data-date'),
+                location: $c.attr('data-location'),
+                el:       this,
+            };
+            e.originalEvent.dataTransfer.effectAllowed = 'move';
+            e.originalEvent.dataTransfer.setData('text/plain', 'move'); // Firefox needs a payload
+            $c.addClass('dragging');
+        });
+
+        $(document).on('dragover', '.availability-cell', function(e) {
+            if (!dragState) return;
+            e.preventDefault();
+            e.originalEvent.dataTransfer.dropEffect = 'move';
+            const status = $(this).attr('data-status');
+            const targetTruck = $(this).attr('data-truck');
+            const targetLoc = $(this).attr('data-location');
+            const crossTruck = targetTruck !== dragState.truck;
+            const crossLoc   = targetLoc !== dragState.location;
+            const invalid = (this === dragState.el)
+                || ['off-day', 'maintenance'].includes(status)
+                || crossTruck
+                || crossLoc;
+            $(this).toggleClass('drop-target-valid', !invalid)
+                   .toggleClass('drop-target-invalid', invalid);
+        });
+
+        $(document).on('dragleave', '.availability-cell', function() {
+            $(this).removeClass('drop-target-valid drop-target-invalid');
+        });
+
+        $(document).on('dragend', '.availability-cell', function() {
+            $('.availability-cell').removeClass('dragging drop-target-valid drop-target-invalid');
+            suppressClickUntil = Date.now() + 300;
+            dragState = null;
+        });
+
+        $(document).on('drop', '.availability-cell', function(e) {
+            e.preventDefault();
+            if (!dragState) return;
+            const src = { truck: dragState.truck, date: dragState.date, location: dragState.location };
+            const tgt = {
+                truck:    $(this).attr('data-truck'),
+                date:     $(this).attr('data-date'),
+                location: $(this).attr('data-location'),
+            };
+            if (src.truck === tgt.truck && src.date === tgt.date && src.location === tgt.location) return;
+            if (src.truck !== tgt.truck) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Different truck',
+                    text: 'Drag-drop can only reassign within the same truck. Use the cell modal to move consignments between trucks.',
+                });
+                return;
+            }
+            if (src.location !== tgt.location) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Different location',
+                    text: 'Drag-drop can only shift dates. Use the cell modal to change MY/SG.',
+                });
+                return;
+            }
+
+            Swal.fire({
+                title: 'Move consignments?',
+                html: `From <b>${src.truck}</b> ${src.date} ${src.location}<br>to <b>${tgt.truck}</b> ${tgt.date} ${tgt.location}`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Move',
+            }).then(r => {
+                if (!r.isConfirmed) return;
+                fetch("{{ route('calendar.move-cell') }}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        source_truck: src.truck, source_date: src.date, source_location: src.location,
+                        target_truck: tgt.truck, target_date: tgt.date, target_location: tgt.location,
+                    }),
+                }).then(async res => {
+                    const body = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(body.message || 'Move failed.');
+                    await Swal.fire({
+                        icon: 'success',
+                        title: 'Moved',
+                        text: body.message,
+                        timer: 1200,
+                        showConfirmButton: false,
+                    });
+                    window.location.reload();
+                }).catch(err => Swal.fire({ icon: 'error', title: 'Cannot move', text: err.message }));
+            });
+        });
+        // --- end drag-and-drop ---
+
         $(document).on('click', '.availability-cell', function(e) {
             const $cell = $(this);
             const status = $cell.data('status');
@@ -1282,6 +1378,13 @@
             window.location.href = url.toString();
         });
 
+        // Handle Horizontal/Vertical MY-SG layout toggle (7-day mode only)
+        document.getElementById('toggleVertical')?.addEventListener('change', function() {
+            const url = new URL(window.location.href);
+            url.searchParams.set('layout', this.checked ? 'vertical' : 'horizontal');
+            window.location.href = url.toString();
+        });
+
         // Handle Prev/Next navigation
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
@@ -1325,13 +1428,21 @@
             const end = picker.endDate.format('YYYY-MM-DD');
             $(this).val(start + ' to ' + end);
 
-            // Redirect or filter calendar via GET parameters
-            window.location.href = `?start_date=${start}&end_date=${end}`;
+            const url = new URL(window.location.href);
+            url.searchParams.set('start_date', start);
+            url.searchParams.set('end_date', end);
+            window.location.href = url.toString();
         });
 
         $('#filter_daterange').on('cancel.daterangepicker', function() {
             $(this).val('');
-            window.location.href = `?`;
+            const current = new URL(window.location.href);
+            const url = new URL(current.pathname, current.origin);
+            const days = current.searchParams.get('days');
+            const layout = current.searchParams.get('layout');
+            if (days) url.searchParams.set('days', days);
+            if (layout) url.searchParams.set('layout', layout);
+            window.location.href = url.toString();
         });
     });
 
@@ -1347,26 +1458,43 @@
                 const $labels = $row.find('.tempLabelInputs');
                 const qty = Math.max(0, Math.min(20, parseInt($qty.val(), 10) || 0));
 
-                const existing = $labels.find('input').map(function() {
+                const existingLabels = $labels.find('input.temp-label-input').map(function() {
+                    return $(this).val();
+                }).get();
+                const existingFs = $labels.find('input.temp-fs-input').map(function() {
                     return $(this).val();
                 }).get();
 
                 $labels.empty();
                 for (let i = 0; i < qty; i++) {
-                    const defaultVal = existing[i] && existing[i].trim() !== '' ?
-                        existing[i] :
+                    const defaultLabel = existingLabels[i] && existingLabels[i].trim() !== '' ?
+                        existingLabels[i] :
                         ('X' + (offset + i + 1));
-                    const $input = $('<input>', {
+                    const $pair = $('<div>', {
+                        class: 'd-flex gap-2 align-items-center',
+                    });
+                    const $labelInput = $('<input>', {
                         type: 'text',
                         name: 'labels[' + rowIdx + '][]',
-                        class: 'form-control form-control-sm',
+                        class: 'form-control form-control-sm temp-label-input',
                         placeholder: 'Label ' + (offset + i + 1),
-                        value: defaultVal,
+                        value: defaultLabel,
                         maxlength: 50,
                         required: true,
                         style: 'width: 110px;',
                     });
-                    $labels.append($input);
+                    const $fsInput = $('<input>', {
+                        type: 'number',
+                        name: 'floor_space[' + rowIdx + '][]',
+                        class: 'form-control form-control-sm temp-fs-input',
+                        placeholder: 'm²',
+                        value: existingFs[i] != null ? existingFs[i] : '',
+                        min: '0',
+                        step: '0.01',
+                        style: 'width: 110px;',
+                    });
+                    $pair.append($labelInput).append($fsInput);
+                    $labels.append($pair);
                 }
                 offset += qty;
             });
@@ -1374,8 +1502,11 @@
 
         function reindexRowNames() {
             $rowsContainer.find('.temp-subcon-row').each(function(rowIdx) {
-                $(this).find('.tempLabelInputs input').each(function() {
+                $(this).find('.tempLabelInputs input.temp-label-input').each(function() {
                     $(this).attr('name', 'labels[' + rowIdx + '][]');
+                });
+                $(this).find('.tempLabelInputs input.temp-fs-input').each(function() {
+                    $(this).attr('name', 'floor_space[' + rowIdx + '][]');
                 });
             });
         }

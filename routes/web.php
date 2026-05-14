@@ -48,6 +48,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('location', LocationController::class);
     Route::resource('driver-holidays', DriverHolidayController::class);
     Route::post('/availability/update', [CalendarController::class, 'updateStatus'])->name('availability.updateStatus');
+    Route::post('/calendar/move-cell', [CalendarController::class, 'moveCell'])->name('calendar.move-cell');
     Route::get('/calendar/cell-details', [CalendarController::class, 'getCellDetails'])->name('calendar.cell-details');
     Route::post('/availability/delete', [CalendarController::class, 'deleteAvailability'])->name('availability.delete');
     Route::delete('/calendar/{truck}/{location}/{date}', [CalendarController::class, 'destroy'])->name('calendar.destroy');

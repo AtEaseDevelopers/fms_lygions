@@ -211,11 +211,11 @@
                             style="font-size: 0.75rem; border-collapse: collapse;">
                             <thead class="">
                                 <tr>
-                                    <th class="sticky-col">
+                                    <th class="sticky-col" rowspan="2">
                                         <input type="checkbox" id="selectAllCheckbox">
                                     </th>
-                                    <th class="sticky-col">No</th>
-                                    <th class="sticky-col">
+                                    <th class="sticky-col" rowspan="2">No</th>
+                                    <th class="sticky-col" rowspan="2">
                                         <a class="text-dark text-decoration-none"
                                             href="{{ route('consignment-order.index', array_merge(request()->query(), ['sort_by' => 'load_date', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'load_date' ? 'desc' : 'asc'])) }}">
                                             <span class="d-inline-block" style="white-space: normal;">
@@ -238,7 +238,7 @@
                                             @endif
                                         </a>
                                     </th> --}}
-                                    <th class="sticky-col">
+                                    <th class="sticky-col" rowspan="2">
                                         <a class="text-dark text-decoration-none"
                                             href="{{ route('consignment-order.index', array_merge(request()->query(), ['sort_by' => 'consignor', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'consignor' ? 'desc' : 'asc'])) }}">
                                             Consignor
@@ -248,8 +248,8 @@
                                             @endif
                                         </a>
                                     </th>
-                                    <th class="sticky-col">Pick Point</th>
-                                    <th class="sticky-col">
+                                    <th class="sticky-col" rowspan="2">Pick Point</th>
+                                    <th class="sticky-col" rowspan="2">
                                         <a class="text-dark text-decoration-none"
                                             href="{{ route('consignment-order.index', array_merge(request()->query(), ['sort_by' => 'consignee', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'consignee' ? 'desc' : 'asc'])) }}">
                                             Consignee
@@ -259,17 +259,15 @@
                                             @endif
                                         </a>
                                     </th>
-                                    <th class="sticky-col">Drop Point</th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">Pick Truck Size</span></th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">Drop Truck Size</span></th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">Pick Truck Type</span></th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">Drop Truck Type</span></th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">
+                                    <th class="sticky-col" rowspan="2">Drop Point</th>
+                                    <th colspan="2"><span class="d-inline-block" style="white-space: normal;">Truck Size</span></th>
+                                    <th colspan="2"><span class="d-inline-block" style="white-space: normal;">Truck Type</span></th>
+                                    <th rowspan="2"><span class="d-inline-block" style="white-space: normal;">
                                             Pick Up Time </span></th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">
+                                    <th rowspan="2"><span class="d-inline-block" style="white-space: normal;">
                                             Qty </span></th>
-                                    <th>Unit</th>
-                                    <th><span class="d-inline-block" style="white-space: normal;">
+                                    <th rowspan="2">Unit</th>
+                                    <th rowspan="2"><span class="d-inline-block" style="white-space: normal;">
                                             Pre-Pick </span></th>
                                     {{-- <th>
                                         <a class="text-dark text-decoration-none"
@@ -282,7 +280,7 @@
                                             @endif
                                         </a>
                                     </th> --}}
-                                    <th>
+                                    <th rowspan="2">
                                         <a class="text-dark text-decoration-none"
                                             href="{{ route('consignment-order.index', array_merge(request()->query(), ['sort_by' => 'truck_number', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'truck_number' ? 'desc' : 'asc'])) }}">
                                             <span class="d-inline-block" style="white-space: normal;">
@@ -293,7 +291,7 @@
                                             @endif
                                         </a>
                                     </th>
-                                    <th>
+                                    <th rowspan="2">
                                         <a class="text-dark text-decoration-none"
                                             href="{{ route('consignment-order.index', array_merge(request()->query(), ['sort_by' => 'remarks', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'remarks' ? 'desc' : 'asc'])) }}">
                                             Remarks
@@ -303,8 +301,8 @@
                                             @endif
                                         </a>
                                     </th>
-                                    <th>Billing Remarks</th>
-                                    <th>
+                                    <th rowspan="2">Billing Remarks</th>
+                                    <th rowspan="2">
                                         <a class="text-dark text-decoration-none"
                                             href="{{ route('consignment-order.index', array_merge(request()->query(), ['sort_by' => 'status', 'sort_order' => request('sort_order') === 'asc' && request('sort_by') === 'status' ? 'desc' : 'asc'])) }}">
                                             Status
@@ -314,8 +312,14 @@
                                             @endif
                                         </a>
                                     </th>
-                                    <th style="text-align: center">Express</th>
-                                    <th></th>
+                                    <th style="text-align: center" rowspan="2">Express</th>
+                                    <th rowspan="2"></th>
+                                </tr>
+                                <tr>
+                                    <th>Pick</th>
+                                    <th>Drop</th>
+                                    <th>Pick</th>
+                                    <th>Drop</th>
                                 </tr>
                             </thead>
 
@@ -384,7 +388,9 @@
                                                     }
                                                 }
                                             @endphp
-                                            {!! nl2br(e(wordwrap($consignorDisplay, 20, "\n", true))) !!}
+                                            <div style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden;">
+                                                {!! nl2br(e(wordwrap($consignorDisplay, 10, "\n", true))) !!}
+                                            </div>
                                         </td>
                                         <td class="sticky-col">{{ $order['pick_point'] ?? '-' }}</td>
 
@@ -401,7 +407,9 @@
                                                     }
                                                 }
                                             @endphp
-                                            {!! nl2br(e(wordwrap($consigneeDisplay, 20, "\n", true))) !!}
+                                            <div style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden;">
+                                                {!! nl2br(e(wordwrap($consigneeDisplay, 10, "\n", true))) !!}
+                                            </div>
                                         </td>
                                         <td class="sticky-col">{{ $order['drop_point'] ?? '-' }}</td>
                                         <td>{{ $order['pick_truck_size'] ?? '-' }}</td>
@@ -2008,49 +2016,73 @@
                     return;
                 }
 
-                // Show loading
-                Swal.fire({
-                    title: 'Saving...',
-                    allowOutsideClick: false,
-                    didOpen: () => {
-                        Swal.showLoading();
-                    }
-                });
+                const expressSelect = row.querySelector('[name="express_mode"]');
+                const newExpress = expressSelect && expressSelect.value === '1';
+                const wasExpress = (row.dataset.expressMode || '0') === '1';
+                const expressTurningOn = newExpress && (!isEdit || !wasExpress);
 
                 const url = isEdit
                     ? `/consignment-order/${editId}/update-inline`
                     : "{{ route('consignment-order.store-inline') }}";
 
-                // Submit via AJAX
-                fetch(url, {
-                        method: "POST",
-                        headers: {
-                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
-                        },
-                        body: formData
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.success) {
-                            Swal.fire({
-                                icon: 'success',
-                                title: isEdit ? 'Updated!' : 'Created!',
-                                text: data.message,
-                                timer: 2000,
-                                showConfirmButton: false
-                            }).then(() => {
-                                location.reload();
-                            });
-                        } else {
-                            Swal.fire('Error', data.message || 'Failed to save order', 'error');
-                            addInlineRowBtn.disabled = false;
-                        }
-                    })
-                    .catch(err => {
-                        console.error(err);
-                        Swal.fire('Error', 'Failed to save order', 'error');
-                        addInlineRowBtn.disabled = false;
+                const submitInline = (action) => {
+                    formData.append('express_action', action);
+
+                    Swal.fire({
+                        title: 'Saving...',
+                        allowOutsideClick: false,
+                        didOpen: () => { Swal.showLoading(); }
                     });
+
+                    fetch(url, {
+                            method: "POST",
+                            headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
+                            body: formData
+                        })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.success) {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: isEdit ? 'Updated!' : 'Created!',
+                                    text: data.message,
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                }).then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire('Error', data.message || 'Failed to save order', 'error');
+                                addInlineRowBtn.disabled = false;
+                            }
+                        })
+                        .catch(err => {
+                            console.error(err);
+                            Swal.fire('Error', 'Failed to save order', 'error');
+                            addInlineRowBtn.disabled = false;
+                        });
+                };
+
+                if (expressTurningOn) {
+                    Swal.fire({
+                        title: 'Confirm Express Mode',
+                        html: '<b>Yes</b>: swap truck region day-by-day to match the express order.<br><b>No</b>: unassign all other orders on this truck from the load date forward and mark availability unavailable.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Yes, swap',
+                        cancelButtonText: 'No, unassign',
+                        confirmButtonColor: '#198754',
+                        cancelButtonColor: '#d33',
+                    }).then(r => {
+                        if (r.isConfirmed) {
+                            submitInline('swap');
+                        } else if (r.dismiss === 'cancel') {
+                            submitInline('unassign');
+                        }
+                    });
+                } else {
+                    submitInline('swap');
+                }
             }
 
             // Cancel inline row

@@ -62,8 +62,10 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
 
-            <form action="{{ route('consignment-order.store') }}" method="POST">
+            <form id="addOrderForm" action="{{ route('consignment-order.store') }}" method="POST">
                 @csrf
+                <input type="hidden" name="express_action" id="addExpressActionInput" value="swap">
+
                 @if ($errors->any())
                     <div class="alert alert-danger">
                         <ul class="mb-0">
@@ -668,5 +670,39 @@
                 })
                 .catch(err => console.error('Error fetching drop truck type:', err));
         }
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const addForm = document.getElementById('addOrderForm');
+        const expressSwitch = document.getElementById('expressModeSwitch');
+        const expressActionInput = document.getElementById('addExpressActionInput');
+        if (!addForm || !expressSwitch || !expressActionInput) return;
+
+        let confirmed = false;
+        addForm.addEventListener('submit', function(e) {
+            if (confirmed) return;
+            if (!expressSwitch.checked) return;
+            e.preventDefault();
+            Swal.fire({
+                title: 'Confirm Express Mode',
+                html: '<b>Yes</b>: swap truck region day-by-day to match the express order.<br><b>No</b>: unassign all other orders on this truck from the load date forward and mark availability unavailable.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, swap',
+                cancelButtonText: 'No, unassign',
+                confirmButtonColor: '#198754',
+                cancelButtonColor: '#d33',
+            }).then(r => {
+                if (r.isConfirmed) {
+                    expressActionInput.value = 'swap';
+                } else if (r.dismiss === 'cancel') {
+                    expressActionInput.value = 'unassign';
+                } else {
+                    return;
+                }
+                confirmed = true;
+                addForm.submit();
+            });
+        });
     });
 </script>

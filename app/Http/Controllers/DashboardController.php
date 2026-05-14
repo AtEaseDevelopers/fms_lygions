@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\Availability;
 use App\Models\Consignment;
+use App\Models\DriverHoliday;
 use App\Models\Notification;
 use App\Models\Truck;
 use App\Models\Unit;
@@ -46,7 +47,27 @@ class DashboardController extends Controller
             ->mapWithKeys(fn($u) => [trim($u->unit) => (float) $u->space])
             ->all();
 
-        $cards = $dates->map(function ($day) use ($trucks, $availableByDate, $consByDate, $unitsMap) {
+        $leavesByDate = [];
+        $leaves = DriverHoliday::with('driver:id,name')
+            ->where('start_date', '<=', $endStr)
+            ->where('end_date', '>=', $startStr)
+            ->get(['id', 'driver_id', 'start_date', 'end_date', 'remarks']);
+        foreach ($leaves as $leave) {
+            $from = Carbon::parse($leave->start_date)->max($start);
+            $to = Carbon::parse($leave->end_date)->min($end);
+            for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
+                $leavesByDate[$d->format('Y-m-d')][] = [
+                    'name' => $leave->driver?->name ?? 'Unknown',
+                    'remarks' => $leave->remarks,
+                ];
+            }
+        }
+        foreach ($leavesByDate as $k => $list) {
+            usort($list, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+            $leavesByDate[$k] = $list;
+        }
+
+        $cards = $dates->map(function ($day) use ($trucks, $availableByDate, $consByDate, $unitsMap, $leavesByDate) {
             $key = $day->toDateString();
 
             $availableTruckIds = $availableByDate->has($key)
@@ -77,6 +98,7 @@ class DashboardController extends Controller
                 'util' => $util,
                 'myCount' => $myCons->count(),
                 'sgCount' => $sgCons->count(),
+                'leaves' => $leavesByDate[$key] ?? [],
             ];
         });
 

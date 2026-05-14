@@ -71,40 +71,97 @@ trait HandlesExpressModeSwap
                 $newLocation = $availability->location === 'SG' ? 'MY' : 'SG';
                 $availability->update(['location' => $newLocation]);
 
-                $stranded = Consignment::where('truck_number', $truckNumber)
-                    ->whereDate('load_date', $currentDate->toDateString())
-                    ->where('id', '!=', $consignment->id)
-                    ->get();
-
-                foreach ($stranded as $other) {
-                    $required = $this->regionFromPickPoint($other->pick_point);
-                    if ($required === $newLocation) {
-                        continue;
-                    }
-
-                    $other->update(['truck_number' => null]);
-
-                    Notification::create([
-                        'type' => 'express_swap_unassigned',
-                        'consignment_id' => $other->id,
-                        'triggered_by_consignment_id' => $consignment->id,
-                        'truck_number' => $truckNumber,
-                        'affected_date' => $currentDate->toDateString(),
-                        'message' => sprintf(
-                            'Truck %s swapped to %s on %s due to express order %s; %s unassigned.',
-                            $truckNumber,
-                            $newLocation,
-                            $currentDate->format('Y-m-d'),
-                            $consignment->consignment_no,
-                            $other->consignment_no
-                        ),
-                    ]);
-
-                    $affected->push($other);
-                }
-
                 $currentDate->addDay();
             }
+
+            $others = Consignment::where('truck_number', $truckNumber)
+                ->whereDate('load_date', '>=', $loadDate->toDateString())
+                ->where('id', '!=', $consignment->id)
+                ->get();
+
+            foreach ($others as $other) {
+                $other->update(['truck_number' => null]);
+
+                Notification::create([
+                    'type' => 'express_swap_unassigned',
+                    'consignment_id' => $other->id,
+                    'triggered_by_consignment_id' => $consignment->id,
+                    'truck_number' => $truckNumber,
+                    'affected_date' => Carbon::parse($other->load_date)->toDateString(),
+                    'message' => sprintf(
+                        'Truck %s swapped from %s due to express order %s; %s unassigned.',
+                        $truckNumber,
+                        $loadDate->toDateString(),
+                        $consignment->consignment_no,
+                        $other->consignment_no
+                    ),
+                ]);
+
+                $affected->push($other);
+            }
+        });
+
+        return ['affected' => $affected];
+    }
+
+    public function applyExpressUnassign(Consignment $consignment): array
+    {
+        if (!$consignment->express_mode || !$consignment->truck_number) {
+            return ['affected' => collect()];
+        }
+
+        $truckNumber = $consignment->truck_number;
+        $truckId = Truck::where('number', $truckNumber)->value('id');
+        $subconId = $truckId ? null : Subcon::where('truck_no', $truckNumber)->value('id');
+
+        if (!$truckId && !$subconId) {
+            return ['affected' => collect()];
+        }
+
+        $loadDate = Carbon::parse($consignment->load_date)->toDateString();
+        $affected = collect();
+
+        DB::transaction(function () use (
+            $consignment,
+            $truckId,
+            $subconId,
+            $truckNumber,
+            $loadDate,
+            &$affected
+        ) {
+            $others = Consignment::where('truck_number', $truckNumber)
+                ->whereDate('load_date', '>=', $loadDate)
+                ->where('id', '!=', $consignment->id)
+                ->get();
+
+            foreach ($others as $other) {
+                $other->update(['truck_number' => null]);
+
+                Notification::create([
+                    'type' => 'express_unassign_all',
+                    'consignment_id' => $other->id,
+                    'triggered_by_consignment_id' => $consignment->id,
+                    'truck_number' => $truckNumber,
+                    'affected_date' => Carbon::parse($other->load_date)->toDateString(),
+                    'message' => sprintf(
+                        'Truck %s marked unavailable from %s due to express order %s; %s unassigned.',
+                        $truckNumber,
+                        $loadDate,
+                        $consignment->consignment_no,
+                        $other->consignment_no
+                    ),
+                ]);
+
+                $affected->push($other);
+            }
+
+            $query = Availability::query()->whereDate('date', '>=', $loadDate);
+            if ($truckId) {
+                $query->where('truck_id', $truckId);
+            } else {
+                $query->where('subcon_id', $subconId);
+            }
+            $query->update(['status' => 'off-day']);
         });
 
         return ['affected' => $affected];

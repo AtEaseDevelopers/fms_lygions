@@ -23,6 +23,7 @@ class CalendarController extends Controller
     public function index(Request $request)
     {
         $days = $this->getDays($request);
+        $layout = $this->getLayout($request, $days);
         $start = $this->getStartDate($request);
         $dates = $this->generateDateRange($start, $days);
 
@@ -186,6 +187,7 @@ class CalendarController extends Controller
             'dates' => $dates,
             'calendarMatrix' => $filteredMatrix,
             'days' => $days,
+            'layout' => $layout,
             'start' => $start,
             'prevStart' => $prevStart,
             'nextStart' => $nextStart,
@@ -217,24 +219,7 @@ class CalendarController extends Controller
             ? Subcon::whereIn('id', $subconIds)->get()->keyBy('id')
             : collect();
 
-        $parseToArray = fn($v) => $this->parseToArray($v);
-        $calcUsed = function ($consignments) use ($parseToArray, $unitsMap) {
-            if (!$unitsMap) return 0.0;
-            $used = 0.0;
-            foreach ($consignments as $c) {
-                $qtys = $parseToArray($c->quantity);
-                $unitStrings = json_decode($c->unit, true);
-                if (!is_array($unitStrings)) {
-                    $unitStrings = $parseToArray($c->unit);
-                }
-                $units = array_map(fn($u) => $unitsMap[trim((string) $u)] ?? 0, $unitStrings);
-                $max = max(count($qtys), count($units), 1);
-                for ($i = 0; $i < $max; $i++) {
-                    $used += ($qtys[$i] ?? $qtys[0] ?? 0) * ($units[$i] ?? $units[0] ?? 1);
-                }
-            }
-            return $used;
-        };
+        $calcUsed = fn($consignments) => $this->calcUsedCapacity($consignments, $unitsMap);
 
         // Shape: [label][rowKey] => ['location' => ..., 'meta' => [...], 'cells' => [dateKey => cellData]]
         // rowKey = "location|chassis_type|size" so the same label with different
@@ -246,11 +231,9 @@ class CalendarController extends Controller
             $consKey = $t->label . '-' . $dateKey;
             $dayCons = $consignmentMap->get($consKey) ?? collect();
 
-            $matchingCons = $t->subcon_id
-                ? ($t->location === 'SG'
-                    ? $dayCons->where('pick_point', 'Singapore')
-                    : $dayCons->where('pick_point', '!=', 'Singapore'))
-                : collect();
+            $matchingCons = $t->location === 'SG'
+                ? $dayCons->where('pick_point', 'Singapore')
+                : $dayCons->where('pick_point', '!=', 'Singapore');
 
             $rowKey = $t->location . '|' . $t->chassis_type . '|' . $t->size;
 
@@ -273,7 +256,7 @@ class CalendarController extends Controller
                 'consignment_count' => $matchingCons->count(),
                 'subcon_id' => $t->subcon_id,
                 'subcon_name' => $subcon?->subcon_name,
-                'subcon_capacity' => (float) ($subcon?->floor_space ?? 0),
+                'subcon_capacity' => (float) ($t->floor_space ?? $subcon?->floor_space ?? 0),
                 'used_capacity' => $calcUsed($matchingCons),
             ];
         }
@@ -284,6 +267,14 @@ class CalendarController extends Controller
     {
         $days = (int) $request->query('days', 14);
         return in_array($days, [7, 14]) ? $days : 14;
+    }
+
+    private function getLayout(Request $request, int $days): string
+    {
+        if ($days !== 7) {
+            return 'horizontal';
+        }
+        return $request->query('layout') === 'vertical' ? 'vertical' : 'horizontal';
     }
 
     private function getStartDate(Request $request): Carbon
@@ -372,15 +363,34 @@ class CalendarController extends Controller
             return $model ? (float) $model->space : 0;
         }, $unitStrings);
     }
+
+    private function calcUsedCapacity(iterable $consignments, $unitsMap): float
+    {
+        if (!$unitsMap) return 0.0;
+        $used = 0.0;
+        foreach ($consignments as $c) {
+            $qtys = $this->parseToArray($c->quantity);
+            $unitStrings = json_decode($c->unit, true);
+            if (!is_array($unitStrings)) {
+                $unitStrings = $this->parseToArray($c->unit);
+            }
+            $units = array_map(fn($u) => $unitsMap[trim((string) $u)] ?? 0, $unitStrings);
+            $max = max(count($qtys), count($units), 1);
+            for ($i = 0; $i < $max; $i++) {
+                $used += ($qtys[$i] ?? $qtys[0] ?? 0) * ($units[$i] ?? $units[0] ?? 1);
+            }
+        }
+        return $used;
+    }
+
     private function buildCalendarMatrix($dates, $truckMap, $availabilityMap, $consignmentMap, $unitsMap, $driverLeaveMap = [], $driverIdByName = [], $defaultDriverByTruckId = null)
     {
         $trucks = Truck::where('is_outsider', 0)->get();
         $calendarMatrix = [];
 
-        $parseToArray = fn($v) => $this->parseToArray($v);
-
         foreach ($trucks as $truck) {
             $defaultDriver = $defaultDriverByTruckId ? $defaultDriverByTruckId->get($truck->id) : null;
+            $originalDriverName = $defaultDriver?->name;
 
             foreach ($dates as $date) {
                 $formattedDate = $date['date']->format('Y-m-d');
@@ -398,21 +408,7 @@ class CalendarController extends Controller
                 $myConsignments = $dayCons->where('pick_point', '!=', 'Singapore');
                 $sgConsignments = $dayCons->where('pick_point', 'Singapore');
 
-                $calcUsed = function ($consignments) use ($parseToArray, $unitsMap) {
-                    $used = 0;
-                    foreach ($consignments as $c) {
-                        $qtys = $parseToArray($c->quantity);
-                        $unitStrings = json_decode($c->unit, true);
-                        if (!is_array($unitStrings))
-                            $unitStrings = $parseToArray($c->unit);
-                        $units = array_map(fn($u) => $unitsMap[trim((string) $u)] ?? 0, $unitStrings);
-                        $max = max(count($qtys), count($units), 1);
-                        for ($i = 0; $i < $max; $i++) {
-                            $used += ($qtys[$i] ?? $qtys[0] ?? 0) * ($units[$i] ?? $units[0] ?? 1);
-                        }
-                    }
-                    return $used;
-                };
+                $calcUsed = fn($consignments) => $this->calcUsedCapacity($consignments, $unitsMap);
 
                 $usedMy = $calcUsed($myConsignments);
                 $usedSg = $calcUsed($sgConsignments);
@@ -440,6 +436,10 @@ class CalendarController extends Controller
                 }
                 $onLeave = $effDriverId !== null && !empty($driverLeaveMap[$effDriverId][$formattedDate]);
 
+                $isOverridden = $originalDriverName !== null
+                    && $effDriverName !== null
+                    && strtolower(trim((string) $effDriverName)) !== strtolower(trim((string) $originalDriverName));
+
                 $myDriverId = $sgDriverId = $effDriverId;
                 $myDriverName = $sgDriverName = $effDriverName;
                 $myOnLeave = $sgOnLeave = $onLeave;
@@ -453,6 +453,8 @@ class CalendarController extends Controller
                         'driver_name' => $myDriverName,
                         'driver_id' => $myDriverId,
                         'driver_on_leave' => $myOnLeave,
+                        'original_driver_name' => $originalDriverName,
+                        'driver_overridden' => $isOverridden,
                     ],
                     'SG' => [
                         'status' => $sgAvailability->status ?? ($sgConsignments->isNotEmpty() ? 'occupied' : 'empty'),
@@ -462,6 +464,8 @@ class CalendarController extends Controller
                         'driver_name' => $sgDriverName,
                         'driver_id' => $sgDriverId,
                         'driver_on_leave' => $sgOnLeave,
+                        'original_driver_name' => $originalDriverName,
+                        'driver_overridden' => $isOverridden,
                     ],
                 ];
             }
@@ -557,20 +561,14 @@ class CalendarController extends Controller
         $location = $temp->location;
         $truckNumber = $temp->label;
 
-        // Mirror buildTempTruckMatrix: without a subcon the slot has no real truck
-        // backing it, so the modal should not surface stale consignors either.
-        if ($temp->subcon_id) {
-            $consignments = Consignment::with('driverInfo')
-                ->where('truck_number', $temp->label)
-                ->whereDate('load_date', $date)
-                ->get();
+        $consignments = Consignment::with('driverInfo')
+            ->where('truck_number', $temp->label)
+            ->whereDate('load_date', $date)
+            ->get();
 
-            $consignments = $location === 'SG'
-                ? $consignments->where('pick_point', 'Singapore')
-                : $consignments->where('pick_point', '!=', 'Singapore');
-        } else {
-            $consignments = collect();
-        }
+        $consignments = $location === 'SG'
+            ? $consignments->where('pick_point', 'Singapore')
+            : $consignments->where('pick_point', '!=', 'Singapore');
 
         $consignors = $consignments->map(fn($c) => [
             'name' => $c->consignor,
@@ -742,6 +740,9 @@ class CalendarController extends Controller
             'labels' => 'nullable|array',
             'labels.*' => 'nullable|array|max:50',
             'labels.*.*' => 'nullable|string|max:50',
+            'floor_space' => 'nullable|array',
+            'floor_space.*' => 'nullable|array',
+            'floor_space.*.*' => 'nullable|numeric|min:0',
         ]);
 
         $truckNumbers = $validated['truck_numbers'] ?? [];
@@ -751,20 +752,29 @@ class CalendarController extends Controller
         $tempTypes = $validated['temp_chassis_type'] ?? [];
         $tempSizes = $validated['temp_size'] ?? [];
         $tempLabelsByRow = $validated['labels'] ?? [];
+        $tempFsByRow = $validated['floor_space'] ?? [];
 
         $tempRows = [];
         foreach ($tempTypes as $i => $type) {
-            $labels = array_values(array_filter(
-                array_map(fn($l) => trim((string) $l), $tempLabelsByRow[$i] ?? []),
-                fn($l) => $l !== ''
-            ));
-            if (empty($labels)) {
+            $rowLabels = $tempLabelsByRow[$i] ?? [];
+            $rowFs = $tempFsByRow[$i] ?? [];
+            $items = [];
+            foreach ($rowLabels as $j => $rawLabel) {
+                $label = trim((string) $rawLabel);
+                if ($label === '') {
+                    continue;
+                }
+                $fsRaw = $rowFs[$j] ?? null;
+                $fs = ($fsRaw === null || $fsRaw === '') ? null : (float) $fsRaw;
+                $items[] = ['label' => $label, 'floor_space' => $fs];
+            }
+            if (empty($items)) {
                 continue;
             }
             $tempRows[] = [
-                'type'   => $type,
-                'size'   => $tempSizes[$i] ?? null,
-                'labels' => $labels,
+                'type'  => $type,
+                'size'  => $tempSizes[$i] ?? null,
+                'items' => $items,
             ];
         }
 
@@ -917,7 +927,7 @@ class CalendarController extends Controller
                 ]);
             }
 
-            $allLabels = array_merge(...array_map(fn($r) => $r['labels'], $tempRows));
+            $allLabels = array_merge(...array_map(fn($r) => array_column($r['items'], 'label'), $tempRows));
             $duplicateLabels = array_diff_assoc($allLabels, array_unique($allLabels));
             if (!empty($duplicateLabels)) {
                 return back()->with('swal', [
@@ -960,14 +970,14 @@ class CalendarController extends Controller
                 DB::transaction(function () use ($tempDates, $firstLocation, $tempRows, &$tempCreated) {
                     foreach ($tempDates as $date) {
                         foreach ($tempRows as $row) {
-                            foreach ($row['labels'] as $label) {
+                            foreach ($row['items'] as $item) {
                                 TemporaryTruck::create([
                                     'date' => $date,
                                     'location' => $firstLocation,
                                     'chassis_type' => $row['type'],
                                     'size' => $row['size'],
-                                    'label' => $label,
-                                    'floor_space' => null,
+                                    'label' => $item['label'],
+                                    'floor_space' => $item['floor_space'],
                                 ]);
                                 $tempCreated++;
                             }
@@ -1157,6 +1167,99 @@ class CalendarController extends Controller
                 'status_updated' => $availability?->status,
             ]
         ]);
+    }
+
+    // Drag-drop move: relocate every consignment in a source cell (truck+date+location)
+    // to a target cell. Unlike updateStatus, the driver is only carried on the moved rows
+    // so the other MY/SG side of the target truck/date isn't clobbered.
+    public function moveCell(Request $request)
+    {
+        $v = $request->validate([
+            'source_truck'    => 'required|string',
+            'source_date'     => 'required|date',
+            'source_location' => 'required|in:MY,SG',
+            'target_truck'    => 'required|string',
+            'target_date'     => 'required|date',
+            'target_location' => 'required|in:MY,SG',
+        ]);
+
+        if ($v['source_truck'] === $v['target_truck']
+            && $v['source_date'] === $v['target_date']
+            && $v['source_location'] === $v['target_location']) {
+            return response()->json(['message' => 'Source and target are the same cell.'], 422);
+        }
+
+        // Same-truck only — cross-truck reassignment goes through the cell-details modal.
+        if ($v['source_truck'] !== $v['target_truck']) {
+            return response()->json([
+                'message' => 'Consignments can only move within the same truck.',
+            ], 422);
+        }
+
+        // Same-location only — MY↔SG migrations would have to rewrite pick_point (NOT NULL,
+        // no sensible default for SG→MY), so they go through the cell-details modal instead.
+        if ($v['source_location'] !== $v['target_location']) {
+            return response()->json([
+                'message' => 'Drag-drop can only shift dates. Use the cell modal to change MY/SG.',
+            ], 422);
+        }
+
+        $targetTruck = Truck::where('number', $v['target_truck'])->where('is_outsider', 0)->first();
+        if (!$targetTruck) {
+            return response()->json(['message' => 'Target truck not found.'], 404);
+        }
+
+        return DB::transaction(function () use ($v, $targetTruck) {
+            $srcOp = $v['source_location'] === 'SG' ? '=' : '!=';
+            $tgtOp = $v['target_location'] === 'SG' ? '=' : '!=';
+
+            $sourceCons = Consignment::where('truck_number', $v['source_truck'])
+                ->whereDate('load_date', $v['source_date'])
+                ->where('pick_point', $srcOp, 'Singapore')
+                ->lockForUpdate()
+                ->get();
+
+            if ($sourceCons->isEmpty()) {
+                return response()->json(['message' => 'Source cell has no consignments to move.'], 422);
+            }
+
+            $targetAvail = Availability::where('truck_id', $targetTruck->id)
+                ->whereDate('date', $v['target_date'])
+                ->where('location', $v['target_location'])
+                ->first();
+            if ($targetAvail && in_array($targetAvail->status, ['off-day', 'maintenance'], true)) {
+                return response()->json(['message' => "Target cell is {$targetAvail->status}."], 422);
+            }
+
+            $unitsMap = Unit::all()->pluck('space', 'unit')
+                ->mapWithKeys(fn($val, $key) => [trim($key) => (float) $val]);
+            $existingTargetCons = Consignment::where('truck_number', $v['target_truck'])
+                ->whereDate('load_date', $v['target_date'])
+                ->where('pick_point', $tgtOp, 'Singapore')
+                ->get();
+            $usedTarget = $this->calcUsedCapacity($existingTargetCons, $unitsMap);
+            $incoming   = $this->calcUsedCapacity($sourceCons, $unitsMap);
+            $total      = (float) ($targetTruck->floor_space ?? 0);
+            if (($usedTarget + $incoming) > $total) {
+                return response()->json([
+                    'message' => 'Target truck capacity exceeded ('
+                        . number_format($usedTarget + $incoming, 1) . ' / '
+                        . number_format($total, 1) . ').',
+                ], 422);
+            }
+
+            // Same truck + same location guaranteed by the guards above, so pick_point
+            // is preserved untouched — only truck_number (a no-op here) and load_date change.
+            Consignment::whereIn('id', $sourceCons->pluck('id'))->update([
+                'truck_number' => $v['target_truck'],
+                'load_date'    => $v['target_date'],
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Moved ' . $sourceCons->count() . ' consignment(s).',
+            ]);
+        });
     }
 
     public function deleteAvailability(Request $request)

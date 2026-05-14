@@ -11,6 +11,8 @@
     .dash-row.is-today { border-left: 4px solid var(--bs-primary) !important; }
     .dash-metric { min-width: 110px; }
     .dash-loc { min-width: 90px; }
+    .dash-leave-toggle .bi-chevron-down { transition: transform .15s ease; }
+    .dash-leave-toggle[aria-expanded="true"] .bi-chevron-down { transform: rotate(180deg); }
 </style>
 
 <div class="container-fluid mt-3">
@@ -111,6 +113,19 @@
                             <i class="bi bi-exclamation-triangle-fill"></i> {{ $unreadDay->count() }} alert{{ $unreadDay->count() === 1 ? '' : 's' }}
                         </span>
                     @endif
+
+                    @if(!empty($c['leaves']))
+                        @php $lid = 'leaves-'.$c['day']->format('Ymd'); @endphp
+                        <button type="button"
+                                class="badge bg-info text-dark dash-num py-2 px-3 border-0 dash-leave-toggle"
+                                style="font-size:.85rem;"
+                                data-leave-target="#{{ $lid }}"
+                                aria-expanded="false" aria-controls="{{ $lid }}">
+                            <i class="bi bi-person-x-fill"></i>
+                            {{ count($c['leaves']) }} on leave
+                            <i class="bi bi-chevron-down ms-1"></i>
+                        </button>
+                    @endif
                 </div>
 
                 @if($unreadDay->isNotEmpty())
@@ -134,6 +149,21 @@
                                 </li>
                             @endforeach
                         </ul>
+                    </div>
+                @endif
+
+                @if(!empty($c['leaves']))
+                    @php $lid = 'leaves-'.$c['day']->format('Ymd'); @endphp
+                    <div class="collapse" id="{{ $lid }}">
+                        <div class="card-footer bg-info-subtle border-0 p-3">
+                            <ul class="list-group list-group-flush">
+                                @foreach($c['leaves'] as $leave)
+                                    <li class="list-group-item bg-transparent px-0">
+                                        <span class="fw-semibold">{{ $leave['name'] }}</span>@if(!empty($leave['remarks']))<span class="text-muted"> — {{ $leave['remarks'] }}</span>@endif
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
                     </div>
                 @endif
 
@@ -180,5 +210,24 @@
         @endforeach
     </div>
 </div>
+
+<script>
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('[data-leave-target]');
+        if (!btn) return;
+        e.preventDefault();
+        const target = document.querySelector(btn.getAttribute('data-leave-target'));
+        if (!target) return;
+        const instance = bootstrap.Collapse.getOrCreateInstance(target, { toggle: false });
+        const isShown = target.classList.contains('show');
+        if (isShown) {
+            instance.hide();
+            btn.setAttribute('aria-expanded', 'false');
+        } else {
+            instance.show();
+            btn.setAttribute('aria-expanded', 'true');
+        }
+    });
+</script>
 
 @endsection

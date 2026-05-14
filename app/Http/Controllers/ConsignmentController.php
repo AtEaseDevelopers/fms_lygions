@@ -329,7 +329,10 @@ class ConsignmentController extends Controller
             $truck->utilization = (float) $truck->floor_space > 0 ? ($used / (float) $truck->floor_space) * 100 : 0;
         }
 
-        return view('consignment.archived-order', compact('consignments', 'trucks_no', 'trucks_grp'));
+        $customers = Customer::all();
+        $affectedIds = [];
+
+        return view('consignment.archived-order', compact('consignments', 'trucks_no', 'trucks_grp', 'customers', 'affectedIds'));
     }
 
 
@@ -413,22 +416,36 @@ class ConsignmentController extends Controller
             'express_mode' => (bool) $request->input('express_mode'),
         ]);
 
-        $affected = $this->applyExpressSwap($consignment)['affected'];
+        $action = $request->input('express_action', 'swap');
+        $affected = $action === 'unassign'
+            ? $this->applyExpressUnassign($consignment)['affected']
+            : $this->applyExpressSwap($consignment)['affected'];
 
-        $swal = $affected->isEmpty()
-            ? [
-                'icon' => 'success',
-                'title' => 'Created!',
-                'text' => 'Consignment order created successfully.',
-            ]
-            : [
+        if ($action === 'unassign' && (bool) $consignment->express_mode) {
+            $swal = [
                 'icon' => 'warning',
                 'title' => 'Created with side-effects',
                 'text' => sprintf(
-                    'Express order saved. %d existing planning(s) were unassigned. See dashboard alerts.',
+                    'Express order saved. Truck marked unavailable from load date; %d other planning(s) were unassigned.',
                     $affected->count()
                 ),
             ];
+        } else {
+            $swal = $affected->isEmpty()
+                ? [
+                    'icon' => 'success',
+                    'title' => 'Created!',
+                    'text' => 'Consignment order created successfully.',
+                ]
+                : [
+                    'icon' => 'warning',
+                    'title' => 'Created with side-effects',
+                    'text' => sprintf(
+                        'Express order saved. %d existing planning(s) were unassigned. See dashboard alerts.',
+                        $affected->count()
+                    ),
+                ];
+        }
 
         return redirect()->back()->with('swal', $swal);
     }
@@ -499,16 +516,28 @@ class ConsignmentController extends Controller
             'express_mode' => (bool) $request->input('express_mode'),
         ]);
 
-        $affected = $this->applyExpressSwap($consignment)['affected'];
+        $action = $request->input('express_action', 'swap');
+        $affected = $action === 'unassign'
+            ? $this->applyExpressUnassign($consignment)['affected']
+            : $this->applyExpressSwap($consignment)['affected'];
 
-        return response()->json([
-            'success' => true,
-            'message' => $affected->isEmpty()
+        if ($action === 'unassign' && (bool) $consignment->express_mode) {
+            $message = sprintf(
+                'Express order saved. Truck marked unavailable from load date; %d other planning(s) were unassigned.',
+                $affected->count()
+            );
+        } else {
+            $message = $affected->isEmpty()
                 ? 'Consignment order created successfully.'
                 : sprintf(
                     'Express order saved. %d existing planning(s) were unassigned. See dashboard alerts.',
                     $affected->count()
-                ),
+                );
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
             'consignment' => $consignment,
             'affected_count' => $affected->count(),
             'affected' => $affected->map(fn($c) => [
@@ -561,27 +590,52 @@ class ConsignmentController extends Controller
             $data['truck_number'] = $this->normalizeTruckNumber($data['truck_number']);
         }
 
+        foreach (['consignor', 'consignee', 'pick_point', 'drop_point'] as $field) {
+            if (array_key_exists($field, $data) && ($data[$field] === null || $data[$field] === '')) {
+                $data[$field] = '-';
+            }
+        }
+
+        if (array_key_exists('status', $data) && empty($data['status'])) {
+            $data['status'] = 'Pending';
+        }
+
         $consignment->update($data);
 
         $affected = collect();
-        if (!$wasExpress && (bool) $consignment->express_mode) {
-            $affected = $this->applyExpressSwap($consignment->fresh())['affected'];
+        $action = $request->input('express_action', 'swap');
+        $expressTurnedOn = !$wasExpress && (bool) $consignment->express_mode;
+        if ($expressTurnedOn) {
+            $affected = $action === 'unassign'
+                ? $this->applyExpressUnassign($consignment->fresh())['affected']
+                : $this->applyExpressSwap($consignment->fresh())['affected'];
         }
 
-        $swal = $affected->isEmpty()
-            ? [
-                'icon' => 'success',
-                'title' => 'Updated!',
-                'text' => 'Order updated successfully.',
-            ]
-            : [
+        if ($expressTurnedOn && $action === 'unassign') {
+            $swal = [
                 'icon' => 'warning',
                 'title' => 'Updated with side-effects',
                 'text' => sprintf(
-                    'Express mode enabled. %d existing planning(s) were unassigned. See dashboard alerts.',
+                    'Express mode enabled. Truck marked unavailable from load date; %d other planning(s) were unassigned.',
                     $affected->count()
                 ),
             ];
+        } else {
+            $swal = $affected->isEmpty()
+                ? [
+                    'icon' => 'success',
+                    'title' => 'Updated!',
+                    'text' => 'Order updated successfully.',
+                ]
+                : [
+                    'icon' => 'warning',
+                    'title' => 'Updated with side-effects',
+                    'text' => sprintf(
+                        'Express mode enabled. %d existing planning(s) were unassigned. See dashboard alerts.',
+                        $affected->count()
+                    ),
+                ];
+        }
 
         return redirect()->back()->with('swal', $swal);
     }
@@ -593,10 +647,10 @@ class ConsignmentController extends Controller
 
         $request->validate([
             'load_date' => 'required|date',
-            'consignor' => 'required|string|max:255',
-            'consignee' => 'required|string|max:255',
-            'pick_point' => 'required|string',
-            'drop_point' => 'required|string',
+            'consignor' => 'nullable|string|max:255',
+            'consignee' => 'nullable|string|max:255',
+            'pick_point' => 'nullable|string',
+            'drop_point' => 'nullable|string',
             'pick_truck_type' => 'nullable|string',
             'drop_truck_type' => 'nullable|string',
             'truck_number' => 'nullable|string|max:50',
@@ -620,10 +674,10 @@ class ConsignmentController extends Controller
 
         $consignment->update([
             'load_date' => $request->load_date,
-            'consignor' => $request->consignor,
-            'consignee' => $request->consignee,
-            'pick_point' => $request->pick_point,
-            'drop_point' => $request->drop_point,
+            'consignor' => $request->consignor ?? '-',
+            'consignee' => $request->consignee ?? '-',
+            'pick_point' => $request->pick_point ?? '-',
+            'drop_point' => $request->drop_point ?? '-',
             'pick_time' => $request->pick_time,
             'remarks' => $request->remarks,
             'billing_remark' => $request->billing_remark,
@@ -642,18 +696,31 @@ class ConsignmentController extends Controller
         ]);
 
         $affected = collect();
-        if (!$wasExpress && (bool) $consignment->express_mode) {
-            $affected = $this->applyExpressSwap($consignment->fresh())['affected'];
+        $action = $request->input('express_action', 'swap');
+        $expressTurnedOn = !$wasExpress && (bool) $consignment->express_mode;
+        if ($expressTurnedOn) {
+            $affected = $action === 'unassign'
+                ? $this->applyExpressUnassign($consignment->fresh())['affected']
+                : $this->applyExpressSwap($consignment->fresh())['affected'];
         }
 
-        return response()->json([
-            'success' => true,
-            'message' => $affected->isEmpty()
+        if ($expressTurnedOn && $action === 'unassign') {
+            $message = sprintf(
+                'Express mode enabled. Truck marked unavailable from load date; %d other planning(s) were unassigned.',
+                $affected->count()
+            );
+        } else {
+            $message = $affected->isEmpty()
                 ? 'Order updated successfully.'
                 : sprintf(
                     'Express mode enabled. %d existing planning(s) were unassigned. See dashboard alerts.',
                     $affected->count()
-                ),
+                );
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
             'affected_count' => $affected->count(),
             'affected' => $affected->map(fn($c) => [
                 'id' => $c->id,
