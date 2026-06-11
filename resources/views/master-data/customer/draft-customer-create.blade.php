@@ -311,6 +311,7 @@
                 <option value="" disabled selected>Select Type</option>
                 <option value="Dropoff">Drop Off</option>
                 <option value="Pickup">Pick Up</option>
+                <option value="Self Delivery">Self Delivery</option>
             </select>
         </td>
         <td>
@@ -318,6 +319,7 @@
                 <option value="" disabled selected>Select Truck Size</option>
                 <option value="Any">Any</option>
                 <option value="Small">Small</option>
+                <option value="Warehouse Truck">Warehouse Truck</option>
             </select>
         </td>
         <td>

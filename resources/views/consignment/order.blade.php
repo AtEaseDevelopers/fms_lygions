@@ -1438,7 +1438,8 @@
             function sizeOptions(selected) {
                 return `<option value=""${!selected ? ' selected' : ''}>-</option>
                         <option value="Small"${selected === 'Small' ? ' selected' : ''}>Small</option>
-                        <option value="Any"${selected === 'Any' ? ' selected' : ''}>Any</option>`;
+                        <option value="Any"${selected === 'Any' ? ' selected' : ''}>Any</option>
+                        <option value="Warehouse Truck"${selected === 'Warehouse Truck' ? ' selected' : ''}>Warehouse Truck</option>`;
             }
 
             row.className = 'inline-edit-row table-warning';
@@ -1807,6 +1808,7 @@
                 <option value="">-</option>
                 <option value="Small">Small</option>
                 <option value="Any">Any</option>
+                <option value="Warehouse Truck">Warehouse Truck</option>
             </select>
         </td>
         <td>
@@ -1814,6 +1816,7 @@
                 <option value="">-</option>
                 <option value="Small">Small</option>
                 <option value="Any">Any</option>
+                <option value="Warehouse Truck">Warehouse Truck</option>
             </select>
         </td>
         <td>
@@ -1928,7 +1931,8 @@
 
                     const typeFilter = type === 'consignor' ? 'pickup' : 'dropoff';
                     const filtered = data.locations.filter(
-                        loc => loc.type && loc.type.toLowerCase() === typeFilter
+                        loc => Array.isArray(loc.types) &&
+                            loc.types.some(t => t.toLowerCase() === typeFilter)
                     );
 
                     const isPick = type === 'consignor';

@@ -986,7 +986,8 @@
 
                     const typeFilter = type === 'consignor' ? 'pickup' : 'dropoff';
                     const filtered = data.locations.filter(
-                        loc => loc.type && loc.type.toLowerCase() === typeFilter
+                        loc => Array.isArray(loc.types) &&
+                            loc.types.some(t => t.toLowerCase() === typeFilter)
                     );
 
                     const isPick = type === 'consignor';

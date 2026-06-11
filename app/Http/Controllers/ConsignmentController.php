@@ -369,6 +369,7 @@ class ConsignmentController extends Controller
             'unit.*' => 'nullable|string',
             'remarks' => 'nullable|string',
             'pre_pick' => 'nullable|string',
+            'self_delivery' => 'nullable|boolean',
         ]);
 
         // current date in GMT+8
@@ -414,6 +415,7 @@ class ConsignmentController extends Controller
             'unit' => $unitJson,
             'status' => $request->status ?? 'Pending',
             'express_mode' => (bool) $request->input('express_mode'),
+            'self_delivery' => (bool) $request->input('self_delivery'),
         ]);
 
         $action = $request->input('express_action', 'swap');
@@ -514,6 +516,7 @@ class ConsignmentController extends Controller
             'unit' => $unitJson,
             'status' => $request->status ?? 'Pending',
             'express_mode' => (bool) $request->input('express_mode'),
+            'self_delivery' => (bool) $request->input('self_delivery'),
         ]);
 
         $action = $request->input('express_action', 'swap');
@@ -599,6 +602,9 @@ class ConsignmentController extends Controller
         if (array_key_exists('status', $data) && empty($data['status'])) {
             $data['status'] = 'Pending';
         }
+
+        // Checkboxes are absent from the payload when unticked.
+        $data['self_delivery'] = (bool) $request->input('self_delivery');
 
         $consignment->update($data);
 
@@ -807,6 +813,8 @@ class ConsignmentController extends Controller
                     'state' => $loc->state ?? 'Unknown',
                     'address' => $loc->address ?? 'Unknown',
                     'type' => $loc->type,
+                    'types' => $loc->type_labels,
+                    'has_self_delivery' => $loc->has_self_delivery,
                     'default_truck_type' => $loc->default_truck_type,
                     'truck_size' => $loc->truck_size,
                     'truck_type' => $loc->truck_type,

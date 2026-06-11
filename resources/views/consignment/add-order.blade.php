@@ -290,6 +290,14 @@
                                 Express Mode
                             </label>
                         </div>
+                        {{-- Shown only when a selected location offers self delivery --}}
+                        <div class="form-label form-switch text-center mt-4 ms-4 d-none" id="selfDeliveryContainer">
+                            <input class="form-check-input" type="checkbox" role="switch" name="self_delivery"
+                                id="selfDeliverySwitch" value="1">
+                            <label class="form-check-label fw-bold ms-2" for="selfDeliverySwitch">
+                                Self Delivery
+                            </label>
+                        </div>
                     </div>
 
                     {{-- Quantity & Unit --}}
@@ -407,7 +415,8 @@
             addressList.innerHTML = '';
 
             const filteredLocations = locations.filter(
-                loc => loc.type && loc.type.toLowerCase() === typeFilter
+                loc => Array.isArray(loc.types) &&
+                    loc.types.some(t => t.toLowerCase() === typeFilter)
             );
 
             filteredLocations.forEach(loc => {
@@ -442,6 +451,22 @@
             }
         }
 
+        // --- Self delivery toggle (shown only when a selected location offers it) ---
+        const selfDeliveryAvailable = { consignor: false, consignee: false };
+
+        function refreshSelfDeliveryToggle() {
+            const container = document.getElementById('selfDeliveryContainer');
+            if (!container) return;
+
+            const available = selfDeliveryAvailable.consignor || selfDeliveryAvailable.consignee;
+            container.classList.toggle('d-none', !available);
+
+            if (!available) {
+                const cb = document.getElementById('selfDeliverySwitch');
+                if (cb) cb.checked = false;
+            }
+        }
+
         // --- Fetch customer locations ---
         function fetchCustomerLocations(name, type) {
             if (!name) return;
@@ -467,12 +492,16 @@
                         );
 
                         // Auto-select pick_truck_type based on default_truck_type from first location
-                        const firstPickup = data.locations.find(loc => loc.type.toLowerCase() === 'pickup');
+                        const firstPickup = data.locations.find(loc =>
+                            Array.isArray(loc.types) && loc.types.some(t => t.toLowerCase() === 'pickup'));
                         const pickTruckTypeSelect = document.getElementById('pick_truck_type');
                         if (firstPickup && firstPickup.default_truck_type && pickTruckTypeSelect) {
                             pickTruckTypeSelect.value = firstPickup.default_truck_type;
                             pickTruckTypeSelect.dispatchEvent(new Event('change'));
                         }
+
+                        selfDeliveryAvailable.consignor = data.locations.some(loc => loc.has_self_delivery);
+                        refreshSelfDeliveryToggle();
 
                     } else if (type === 'consignee') {
                         const dropPointInput = document.getElementById('drop_point');
@@ -490,12 +519,16 @@
                         );
 
                         // Auto-select drop_truck_type based on default_truck_type from first location
-                        const firstDrop = data.locations.find(loc => loc.type.toLowerCase() === 'dropoff');
+                        const firstDrop = data.locations.find(loc =>
+                            Array.isArray(loc.types) && loc.types.some(t => t.toLowerCase() === 'dropoff'));
                         const dropTruckTypeSelect = document.getElementById('drop_truck_type');
                         if (firstDrop && firstDrop.default_truck_type && dropTruckTypeSelect) {
                             dropTruckTypeSelect.value = firstDrop.default_truck_type;
                             dropTruckTypeSelect.dispatchEvent(new Event('change'));
                         }
+
+                        selfDeliveryAvailable.consignee = data.locations.some(loc => loc.has_self_delivery);
+                        refreshSelfDeliveryToggle();
                     }
                 })
                 .catch(err => console.error('Error fetching locations:', err));

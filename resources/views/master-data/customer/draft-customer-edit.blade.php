@@ -263,6 +263,9 @@
                                                 Drop Off</option>
                                             <option value="Pickup" {{ $location->type == 'Pickup' ? 'selected' : '' }}>
                                                 Pick Up</option>
+                                            <option value="Self Delivery"
+                                                {{ $location->type == 'Self Delivery' ? 'selected' : '' }}>
+                                                Self Delivery</option>
                                         </select>
                                     </td>
 
@@ -278,6 +281,9 @@
                                             <option value="Small"
                                                 {{ ($location->truck_size ?? '') == 'Small' ? 'selected' : '' }}>
                                                 Small</option>
+                                            <option value="Warehouse Truck"
+                                                {{ ($location->truck_size ?? '') == 'Warehouse Truck' ? 'selected' : '' }}>
+                                                Warehouse Truck</option>
                                         </select>
                                     </td>
 
@@ -393,6 +399,7 @@
                 <option value="" disabled>Select Type</option>
                 <option value="Dropoff">Drop Off</option>
                 <option value="Pickup">Pick Up</option>
+                <option value="Self Delivery">Self Delivery</option>
             </select></td>
 <td>
 
@@ -400,6 +407,7 @@
                 <option value="" disabled selected>Select Truck Size</option>
                 <option value="Any">Any</option>
                 <option value="Small">Small</option>
+                <option value="Warehouse Truck">Warehouse Truck</option>
             </select>
         </td>
              <td>

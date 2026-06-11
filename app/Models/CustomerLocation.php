@@ -33,12 +33,16 @@ class CustomerLocation extends Model
     protected static $typeMap = [
         1 => 'Pickup',
         2 => 'Dropoff',
+        3 => 'Self Delivery',
     ];
 
     protected static $typeReverseMap = [
         'Pickup' => 1,
         'Dropoff' => 2,
+        'Self Delivery' => 3,
     ];
+
+    const SELF_DELIVERY_ID = 3;
 
     protected static $stateMap = null;
 
@@ -93,16 +97,53 @@ class CustomerLocation extends Model
         $this->attributes['location'] = $value;
     }
 
-    // Accessor: type (maps numeric to string)
+    // Raw type ids as an array of ints. `type` is stored as a comma separated
+    // list (e.g. "1,3") by the SNL app to support multiple types per location.
+    public function getTypeIdsAttribute(): array
+    {
+        $raw = $this->attributes['type'] ?? null;
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+
+        return array_values(array_filter(array_map('intval', explode(',', (string) $raw))));
+    }
+
+    // Type ids resolved to labels, e.g. ['Pickup', 'Self Delivery'].
+    public function getTypeLabelsAttribute(): array
+    {
+        return array_map(function ($id) {
+            return static::$typeMap[$id] ?? (string) $id;
+        }, $this->type_ids);
+    }
+
+    // Whether this location offers self delivery.
+    public function getHasSelfDeliveryAttribute(): bool
+    {
+        return in_array(self::SELF_DELIVERY_ID, $this->type_ids, true);
+    }
+
+    // Accessor: type (maps comma separated ids to comma separated labels)
     public function getTypeAttribute($value)
     {
+        if ($value === null || $value === '') {
+            return $value;
+        }
+
+        // Single legacy numeric value -> single label (unchanged behaviour).
         if (is_numeric($value)) {
             return static::$typeMap[(int) $value] ?? $value;
         }
+
+        // Comma separated ids -> comma separated labels.
+        if (strpos((string) $value, ',') !== false) {
+            return implode(',', $this->type_labels);
+        }
+
         return $value;
     }
 
-    // Mutator: type (maps string to numeric)
+    // Mutator: type (maps string label to numeric; passes through ids/CSV)
     public function setTypeAttribute($value)
     {
         if (isset(static::$typeReverseMap[$value])) {

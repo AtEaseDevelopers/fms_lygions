@@ -250,6 +250,18 @@
                                 Express Mode
                             </label>
                         </div>
+                        <div class="form-label form-switch text-center mt-4 ms-4">
+                            <!-- Hidden field ensures "false" is sent when unchecked -->
+                            <input type="hidden" name="self_delivery" value="0">
+
+                            <input class="form-check-input" type="checkbox" role="switch" name="self_delivery"
+                                id="selfDeliverySwitch{{ $order['index'] }}" value="1"
+                                {{ !empty($order['self_delivery']) ? 'checked' : '' }}>
+                            <label class="form-check-label fw-bold ms-2"
+                                for="selfDeliverySwitch{{ $order['index'] }}">
+                                Self Delivery
+                            </label>
+                        </div>
                     </div>
 
                     <div class="col-md-12">
@@ -392,7 +404,8 @@
             addressList.innerHTML = '';
 
             locations
-                .filter(loc => loc.type && loc.type.toLowerCase() === typeFilter)
+                .filter(loc => Array.isArray(loc.types) &&
+                    loc.types.some(t => t.toLowerCase() === typeFilter))
                 .forEach(loc => {
                     const optionPoint = document.createElement('option');
                     optionPoint.value = loc.state;

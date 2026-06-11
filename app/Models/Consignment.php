@@ -29,6 +29,7 @@ class Consignment extends Model
         'unit',
         'pre_pick',
         'express_mode',
+        'self_delivery',
         'driver',
         'pick_truck_size',
         'drop_truck_size',
