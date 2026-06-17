@@ -49,8 +49,10 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('driver-holidays', DriverHolidayController::class);
     Route::post('/availability/update', [CalendarController::class, 'updateStatus'])->name('availability.updateStatus');
     Route::post('/calendar/move-cell', [CalendarController::class, 'moveCell'])->name('calendar.move-cell');
+    Route::post('/calendar/move-availability', [CalendarController::class, 'moveAvailability'])->name('calendar.move-availability');
     Route::get('/calendar/cell-details', [CalendarController::class, 'getCellDetails'])->name('calendar.cell-details');
     Route::post('/availability/delete', [CalendarController::class, 'deleteAvailability'])->name('availability.delete');
+    Route::post('/availability/bulk-delete', [CalendarController::class, 'bulkDeleteAvailability'])->name('availability.bulk-delete');
     Route::delete('/calendar/{truck}/{location}/{date}', [CalendarController::class, 'destroy'])->name('calendar.destroy');
     Route::post('/calendar/temp-trucks/{id}/assign-subcon', [CalendarController::class, 'assignSubconToTemp'])->name('calendar.temp-trucks.assign-subcon');
     Route::delete('/calendar/temp-trucks/{id}', [CalendarController::class, 'destroyTempTruck'])->name('calendar.temp-trucks.destroy');

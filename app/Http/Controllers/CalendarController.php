@@ -1262,6 +1262,84 @@ class CalendarController extends Controller
         });
     }
 
+    // Drag-drop move: relocate a white "available" cell's Availability record to a
+    // different date on the SAME truck + SAME location. Mirrors moveCell, but acts on
+    // the availability row rather than consignments. The target cell must be empty.
+    public function moveAvailability(Request $request)
+    {
+        $v = $request->validate([
+            'source_truck'    => 'required|string',
+            'source_date'     => 'required|date',
+            'source_location' => 'required|in:MY,SG',
+            'target_truck'    => 'required|string',
+            'target_date'     => 'required|date',
+            'target_location' => 'required|in:MY,SG',
+        ]);
+
+        if ($v['source_truck'] === $v['target_truck']
+            && $v['source_date'] === $v['target_date']
+            && $v['source_location'] === $v['target_location']) {
+            return response()->json(['message' => 'Source and target are the same cell.'], 422);
+        }
+
+        // Same-truck only — keep parity with consignment drag-drop.
+        if ($v['source_truck'] !== $v['target_truck']) {
+            return response()->json([
+                'message' => 'Availability can only move within the same truck.',
+            ], 422);
+        }
+
+        // Same-location only — changing MY/SG goes through the availability form.
+        if ($v['source_location'] !== $v['target_location']) {
+            return response()->json([
+                'message' => 'Drag-drop can only shift dates. Use the form to change MY/SG.',
+            ], 422);
+        }
+
+        $truck = Truck::where('number', $v['source_truck'])->where('is_outsider', 0)->first();
+        if (!$truck) {
+            return response()->json(['message' => 'Truck not found.'], 404);
+        }
+
+        return DB::transaction(function () use ($v, $truck) {
+            $source = Availability::where('truck_id', $truck->id)
+                ->where('location', $v['source_location'])
+                ->whereDate('date', $v['source_date'])
+                ->where('status', 'available')
+                ->lockForUpdate()
+                ->first();
+            if (!$source) {
+                return response()->json(['message' => 'Source cell has no availability to move.'], 422);
+            }
+
+            // Target must be free: no consignments on that side and no existing availability.
+            $tgtOp = $v['target_location'] === 'SG' ? '=' : '!=';
+            $targetHasCons = Consignment::where('truck_number', $v['target_truck'])
+                ->whereDate('load_date', $v['target_date'])
+                ->where('pick_point', $tgtOp, 'Singapore')
+                ->exists();
+            if ($targetHasCons) {
+                return response()->json(['message' => 'Target cell already has consignments.'], 422);
+            }
+
+            $targetAvail = Availability::where('truck_id', $truck->id)
+                ->where('location', $v['target_location'])
+                ->whereDate('date', $v['target_date'])
+                ->exists();
+            if ($targetAvail) {
+                return response()->json(['message' => 'Target cell already has an availability.'], 422);
+            }
+
+            $source->date = $v['target_date'];
+            $source->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Availability moved to ' . $v['target_date'] . '.',
+            ]);
+        });
+    }
+
     public function deleteAvailability(Request $request)
     {
         $validated = $request->validate([
@@ -1281,6 +1359,50 @@ class CalendarController extends Controller
         }
 
         return response()->json(['success' => false, 'message' => 'Availability not found'], 404);
+    }
+
+    // Bulk-delete multiple 'available' availability records selected from the calendar.
+    // Each item identifies a single cell by truck number + location + date, matching the
+    // granularity used by destroy(). Only records currently in the 'available' status are
+    // removed so an accidental selection can't wipe out off-day/maintenance entries.
+    public function bulkDeleteAvailability(Request $request)
+    {
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.truck' => 'required|string',
+            'items.*.location' => 'required|string',
+            'items.*.date' => 'required|date',
+        ]);
+
+        $truckIds = Truck::whereIn('number', collect($validated['items'])->pluck('truck')->unique())
+            ->pluck('id', 'number');
+
+        $deleted = 0;
+        foreach ($validated['items'] as $item) {
+            $truckId = $truckIds[$item['truck']] ?? null;
+            if (!$truckId) {
+                continue;
+            }
+
+            $deleted += Availability::where('truck_id', $truckId)
+                ->where('location', strtoupper($item['location']))
+                ->where('status', 'available')
+                ->whereDate('date', $item['date'])
+                ->delete();
+        }
+
+        if ($deleted) {
+            return response()->json([
+                'success' => true,
+                'deleted' => $deleted,
+                'message' => "{$deleted} availability record(s) deleted successfully",
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'No matching available records found',
+        ], 404);
     }
 
 }

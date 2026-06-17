@@ -256,6 +256,7 @@ class CustomerController extends Controller
             'locations.*.load_type' => 'nullable|array',
             'locations.*.load_type.*' => 'string|max:50',
             'locations.*.pickup_dropoff_point' => 'nullable|string|max:255',
+            'locations.*.operation_hours' => 'nullable|string',
         ]);
 
         $customer->update($request->only([
@@ -301,6 +302,7 @@ class CustomerController extends Controller
             'locations.*.load_type' => 'nullable|array',
             'locations.*.load_type.*' => 'string|max:50',
             'locations.*.pickup_dropoff_point' => 'nullable|string|max:255',
+            'locations.*.operation_hours' => 'nullable|string',
         ]);
 
         $draftCustomer->update($request->only([

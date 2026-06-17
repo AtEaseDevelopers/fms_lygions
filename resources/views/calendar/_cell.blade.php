@@ -17,7 +17,7 @@
 @endphp
 <td class="p-2 availability-cell @if ($driverOnLeave) border border-danger border-2 @endif"
     style="{{ $cellStyle }}"
-    @if ($consignors->isNotEmpty()) draggable="true" @endif
+    @if ($consignors->isNotEmpty() || $status === 'available') draggable="true" @endif
     data-truck="{{ $truckNumber }}" data-location="{{ $location }}" data-date="{{ $dateOnly }}"
     data-status="{{ $status }}"
     data-has-consignors="{{ $consignors->isNotEmpty() ? 'true' : 'false' }}">

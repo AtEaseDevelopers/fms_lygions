@@ -25,9 +25,28 @@ class CustomerLocation extends Model
         'truck_type',
         'load_type',
         'pickup_dropoff_point',
+        // Per-day operation hours JSON. Owned/edited by the SNL app; FMS only
+        // displays it (view-only) but keeps it fillable so a customer edit in
+        // FMS (which deletes + recreates locations) preserves the value via a
+        // hidden field instead of wiping it.
+        'operation_hours',
         // Virtual field names (mapped via mutators)
         'state',
         'address',
+    ];
+
+    /**
+     * Days of week for per-day operation hours, in display order.
+     * Mirrors SNL's CustomerLocation::OPERATION_DAYS (shared table).
+     */
+    const OPERATION_DAYS = [
+        'monday' => 'Monday',
+        'tuesday' => 'Tuesday',
+        'wednesday' => 'Wednesday',
+        'thursday' => 'Thursday',
+        'friday' => 'Friday',
+        'saturday' => 'Saturday',
+        'sunday' => 'Sunday',
     ];
 
     protected static $typeMap = [
@@ -151,6 +170,29 @@ class CustomerLocation extends Model
         } else {
             $this->attributes['type'] = $value;
         }
+    }
+
+    /**
+     * Per-day operation hours stored as a JSON map by the SNL app, e.g.
+     * {"monday":"8","tuesday":"8", ...}. Returns a normalised array with every
+     * day (in OPERATION_DAYS order); empty means the location is closed that
+     * day. View-only in FMS.
+     */
+    public function getOperationHoursArrayAttribute(): array
+    {
+        $decoded = [];
+        $raw = $this->attributes['operation_hours'] ?? null;
+        if (!empty($raw)) {
+            $decoded = json_decode((string) $raw, true) ?: [];
+        }
+
+        $result = [];
+        foreach (array_keys(self::OPERATION_DAYS) as $day) {
+            $value = $decoded[$day] ?? '';
+            $result[$day] = is_scalar($value) ? (string) $value : '';
+        }
+
+        return $result;
     }
 
     public function customer()

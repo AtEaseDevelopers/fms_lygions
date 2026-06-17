@@ -59,6 +59,7 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
                         <form class="d-flex gap-3 align-items-stretch" id="filterForm" style="width: 100%;">
+                            <input type="hidden" name="per_page" value="{{ request('per_page', 10) }}">
                             <div class="input-group">
                                 <input type="text" name="filter_daterange" class="form-control" id="filter_daterange"
                                     value="{{ request('filter_daterange') }}" placeholder="Filter Date Range"
@@ -184,6 +185,11 @@
 
                                 <div class="card-header d-flex justify-content-between align-items-center">
                                     <form method="GET" class="d-flex align-items-center gap-2">
+                                        <input type="hidden" name="filter_daterange" value="{{ request('filter_daterange') }}">
+                                        <input type="hidden" name="search" value="{{ request('search') }}">
+                                        <input type="hidden" name="status" value="{{ request('status') }}">
+                                        <input type="hidden" name="truck_type" value="{{ request('truck_type') }}">
+                                        <input type="hidden" name="truck_number" value="{{ request('truck_number') }}">
                                         <label for="per_page" class="mb-0">Show</label>
                                         <select name="per_page" id="per_page" class="form-select"
                                             onchange="this.form.submit()">
@@ -370,6 +376,16 @@
                                             @if ($order->express_mode)
                                                 <i class="bi bi-speedometer2 text-danger ms-2 express-icon"
                                                     title="Express Mode"></i>
+                                            @endif
+                                            @if (!empty($order['remarks']))
+                                                <i class="bi bi-chat-left-text-fill text-primary ms-2 remark-icon"
+                                                    data-bs-toggle="tooltip" data-bs-placement="right"
+                                                    title="Remarks: {{ $order['remarks'] }}"></i>
+                                            @endif
+                                            @if (!empty($order['billing_remark']))
+                                                <i class="bi bi-receipt text-success ms-2 remark-icon"
+                                                    data-bs-toggle="tooltip" data-bs-placement="right"
+                                                    title="Billing Remarks: {{ $order['billing_remark'] }}"></i>
                                             @endif
                                         </td>
                                         {{-- <td>{{ $order['consignment_no'] ?? '-' }}</td> --}}
@@ -2590,6 +2606,12 @@
     .express-icon {
         font-size: 1.3em;
         font-weight: bold;
+    }
+
+    /* Remarks / billing remarks indicators */
+    .remark-icon {
+        font-size: 1.1em;
+        cursor: help;
     }
 
 

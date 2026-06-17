@@ -201,6 +201,7 @@
                                 <th>Truck Size</th>
                                 <th>Truck Type</th>
                                 <th>Load Type</th>
+                                <th>Operation Hours</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
@@ -363,6 +364,26 @@
                                     </td>
 
                                     <td>
+                                        {{-- View-only: operation hours are managed in the SNL app. The hidden
+                                             field preserves the JSON so updating a customer here (which deletes +
+                                             recreates locations) doesn't wipe it. --}}
+                                        <input type="hidden" name="locations[{{ $loop->index }}][operation_hours]"
+                                            value="{{ $location->operation_hours }}">
+                                        @php($hours = $location->operation_hours_array)
+                                        <div style="display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.8rem;">
+                                            @foreach (\App\Models\CustomerLocation::OPERATION_DAYS as $dayKey => $dayLabel)
+                                                <div style="display: flex; gap: 0.4rem; white-space: nowrap;">
+                                                    <span style="width: 2.5rem; color: #6c757d;">{{ \Illuminate\Support\Str::substr($dayLabel, 0, 3) }}</span>
+                                                    @if ($hours[$dayKey] !== '')
+                                                        <span>{{ $hours[$dayKey] }}</span>
+                                                    @else
+                                                        <span style="color: #adb5bd;">Closed</span>
+                                                    @endif
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    </td>
+                                    <td>
                                         <button type="button" class="btn btn-danger btn-sm remove-row">Delete</button>
                                     </td>
                                 </tr>
@@ -464,6 +485,10 @@
         </div>
     </td>
 
+            <td>
+                <input type="hidden" name="locations[${rowCount}][operation_hours]" value="">
+                <span style="color: #adb5bd; font-size: 0.8rem;">Set in SNL</span>
+            </td>
             <td><button type="button" class="btn btn-danger btn-sm remove-row">Delete</button></td>
         </tr>
     `;

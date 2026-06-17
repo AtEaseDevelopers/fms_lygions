@@ -258,16 +258,33 @@
             const topScroll = document.getElementById("tableScrollTop");
             const bottomScroll = document.getElementById("tableScrollBottom");
 
-            // make top scroller width = table width
-            topScroll.innerHTML = "<div style='width:" + bottomScroll.scrollWidth + "px; height:1px;'></div>";
+            if (topScroll && bottomScroll) {
+                // make top scroller width = table width
+                function syncTopScrollWidth() {
+                    topScroll.innerHTML = "<div style='width:" + bottomScroll.scrollWidth +
+                        "px; height:1px;'></div>";
+                }
+                syncTopScrollWidth();
 
-            // sync scrolling
-            topScroll.addEventListener("scroll", () => {
-                bottomScroll.scrollLeft = topScroll.scrollLeft;
-            });
-            bottomScroll.addEventListener("scroll", () => {
-                topScroll.scrollLeft = bottomScroll.scrollLeft;
-            });
+                // sync scrolling
+                topScroll.addEventListener("scroll", () => {
+                    bottomScroll.scrollLeft = topScroll.scrollLeft;
+                });
+                bottomScroll.addEventListener("scroll", () => {
+                    topScroll.scrollLeft = bottomScroll.scrollLeft;
+                });
+
+                // Recompute the top scrollbar width whenever the table size changes
+                // (e.g. entering/leaving "Edit All" swaps cells for inline inputs and
+                // changes the table width — without this the top drag-scrollbar's range
+                // gets out of sync, which is most noticeable on Windows where there is no
+                // trackpad horizontal scroll).
+                const scrollTable = bottomScroll.querySelector("table");
+                if (scrollTable && typeof ResizeObserver !== "undefined") {
+                    new ResizeObserver(() => syncTopScrollWidth()).observe(scrollTable);
+                }
+                window.addEventListener("resize", syncTopScrollWidth);
+            }
 
 
         });

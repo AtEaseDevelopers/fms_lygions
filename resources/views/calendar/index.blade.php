@@ -95,12 +95,29 @@
                     </div>
                 @endif
 
+                <button type="button" class="btn btn-outline-danger" id="toggleSelectMode"
+                    style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
+                    <i class="bi bi-check2-square" style="font-size: 20px; margin-right: 5px;"></i>
+                    Select to Delete
+                </button>
+
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#availabilityModal"
                     style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
                     <i class="bi bi-calendar-plus-fill" style="font-size: 20px; margin-right: 5px;"></i>
                     Create New Availability
                 </button>
             </div>
+        </div>
+
+        {{-- Floating action bar shown while in multi-select delete mode --}}
+        <div id="bulkDeleteBar"
+            class="d-none align-items-center gap-3 shadow position-fixed bottom-0 start-50 translate-middle-x mb-4 px-4 py-2 bg-white border rounded-pill"
+            style="z-index: 1080;">
+            <span class="fw-bold" id="bulkSelectedCount">0 selected</span>
+            <button type="button" class="btn btn-danger btn-sm" id="bulkDeleteBtn" disabled>
+                <i class="bi bi-trash-fill me-1"></i> Delete Selected
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="bulkCancelBtn">Cancel</button>
         </div>
 
 
@@ -374,8 +391,7 @@
                                 <th>
                                     <div>
                                         <span class="{{ $tdColor }}">
-                                            {{ number_format($tdRemaining, 1) }}<span style="color: black"> /
-                                                {{ number_format($tdTotal, 1) }}</span>
+                                            {{ number_format($tdRemaining, 1) }}
                                         </span>
                                     </div>
                                     <div><strong>{{ \Carbon\Carbon::parse($date['date'])->format('D') }}</strong></div>
@@ -885,6 +901,33 @@
     .availability-cell.dragging { opacity: 0.4; }
     .availability-cell.drop-target-valid   { outline: 3px dashed #198754; outline-offset: -3px; }
     .availability-cell.drop-target-invalid { outline: 3px dashed #dc3545; outline-offset: -3px; cursor: not-allowed; }
+
+    /* Multi-select delete mode: only 'available' cells are selectable */
+    body.bulk-select-mode .availability-cell[data-status="available"] {
+        cursor: pointer;
+        outline: 1px dashed #adb5bd;
+        outline-offset: -2px;
+    }
+    body.bulk-select-mode .availability-cell[data-status="available"]:hover {
+        outline: 2px dashed #0d6efd;
+        outline-offset: -2px;
+    }
+    .availability-cell.bulk-selected {
+        outline: 3px solid #dc3545 !important;
+        outline-offset: -3px;
+        box-shadow: inset 0 0 0 9999px rgba(220, 53, 69, 0.18);
+        position: relative;
+    }
+    .availability-cell.bulk-selected::after {
+        content: "\2713";
+        position: absolute;
+        top: 2px;
+        left: 4px;
+        font-weight: bold;
+        color: #dc3545;
+        line-height: 1;
+    }
+    #bulkDeleteBar { gap: 1rem; }
 </style>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
@@ -1129,10 +1172,133 @@
             }
         });
 
+        // --- Multi-select bulk delete of 'available' cells ---
+        const bulkSelected = new Map(); // key -> {truck, location, date}
+        const bulkBar = document.getElementById('bulkDeleteBar');
+        const bulkCountLabel = document.getElementById('bulkSelectedCount');
+        const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+        const cellKey = (t, l, d) => `${t}|${l}|${d}`;
+
+        function isSelectMode() {
+            return document.body.classList.contains('bulk-select-mode');
+        }
+
+        function refreshBulkBar() {
+            const n = bulkSelected.size;
+            bulkCountLabel.textContent = `${n} selected`;
+            bulkDeleteBtn.disabled = n === 0;
+        }
+
+        function clearBulkSelection() {
+            bulkSelected.clear();
+            $('.availability-cell.bulk-selected').removeClass('bulk-selected');
+            refreshBulkBar();
+        }
+
+        function setSelectMode(on) {
+            document.body.classList.toggle('bulk-select-mode', on);
+            bulkBar.classList.toggle('d-none', !on);
+            bulkBar.classList.toggle('d-flex', on);
+            const btn = document.getElementById('toggleSelectMode');
+            btn.classList.toggle('btn-danger', on);
+            btn.classList.toggle('btn-outline-danger', !on);
+            if (!on) clearBulkSelection();
+        }
+
+        document.getElementById('toggleSelectMode').addEventListener('click', function() {
+            setSelectMode(!isSelectMode());
+        });
+        document.getElementById('bulkCancelBtn').addEventListener('click', function() {
+            setSelectMode(false);
+        });
+
+        // Intercept clicks on 'available' cells while in select mode (bound before the
+        // modal-opening handler so the modal never fires during selection).
+        $(document).on('click', '.availability-cell', function(e) {
+            if (!isSelectMode()) return;
+            // While selecting, no cell should open its modal or single-delete popup.
+            e.stopImmediatePropagation();
+            const $cell = $(this);
+            if ($cell.data('status') !== 'available') return; // only available cells selectable
+            const truck = String($cell.data('truck'));
+            const location = String($cell.data('location'));
+            const date = String($cell.data('date'));
+            const key = cellKey(truck, location, date);
+            if (bulkSelected.has(key)) {
+                bulkSelected.delete(key);
+                $cell.removeClass('bulk-selected');
+            } else {
+                bulkSelected.set(key, { truck, location, date });
+                $cell.addClass('bulk-selected');
+            }
+            refreshBulkBar();
+        });
+
+        bulkDeleteBtn.addEventListener('click', function() {
+            if (bulkSelected.size === 0) return;
+            const items = Array.from(bulkSelected.values());
+            Swal.fire({
+                title: 'Delete selected availability?',
+                text: `${items.length} available record(s) will be permanently deleted.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, delete them!',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+                fetch("{{ route('availability.bulk-delete') }}", {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ items })
+                    })
+                    .then(async res => {
+                        const json = await res.json();
+                        if (!res.ok) throw new Error(json.message || 'Delete failed');
+                        return json;
+                    })
+                    .then(data => {
+                        if (data?.success) {
+                            Swal.fire({
+                                title: 'Deleted!',
+                                text: data.message || 'Selected availability has been deleted.',
+                                icon: 'success',
+                                timer: 1500,
+                                showConfirmButton: false
+                            }).then(() => window.location.reload());
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Bulk delete error:', err);
+                        Swal.fire('Error', err.message || 'Failed to delete availability', 'error');
+                    });
+            });
+        });
+        // --- end multi-select bulk delete ---
+
         $(document).on('dragstart', '.availability-cell[draggable="true"]', function(e) {
+            // In bulk-select mode a click should select, not start a drag.
+            if (document.body.classList.contains('bulk-select-mode')) {
+                e.preventDefault();
+                return;
+            }
             const $c = $(this);
-            if ($c.attr('data-has-consignors') !== 'true') { e.preventDefault(); return; }
+            // Two drag kinds: an occupied cell moves its consignments; a white
+            // 'available' cell (no consignors) moves the availability record itself.
+            let kind = null;
+            if ($c.attr('data-has-consignors') === 'true') {
+                kind = 'consignment';
+            } else if ($c.attr('data-status') === 'available') {
+                kind = 'availability';
+            }
+            if (!kind) { e.preventDefault(); return; }
             dragState = {
+                kind,
                 truck:    $c.attr('data-truck'),
                 date:     $c.attr('data-date'),
                 location: $c.attr('data-location'),
@@ -1150,12 +1316,24 @@
             const status = $(this).attr('data-status');
             const targetTruck = $(this).attr('data-truck');
             const targetLoc = $(this).attr('data-location');
+            const targetHasCons = $(this).attr('data-has-consignors') === 'true';
             const crossTruck = targetTruck !== dragState.truck;
             const crossLoc   = targetLoc !== dragState.location;
-            const invalid = (this === dragState.el)
-                || ['off-day', 'maintenance'].includes(status)
-                || crossTruck
-                || crossLoc;
+            let invalid;
+            if (dragState.kind === 'availability') {
+                // Availability can only be relocated onto a free (empty) cell of the
+                // same truck + location.
+                invalid = (this === dragState.el)
+                    || crossTruck
+                    || crossLoc
+                    || targetHasCons
+                    || status !== 'empty';
+            } else {
+                invalid = (this === dragState.el)
+                    || ['off-day', 'maintenance'].includes(status)
+                    || crossTruck
+                    || crossLoc;
+            }
             $(this).toggleClass('drop-target-valid', !invalid)
                    .toggleClass('drop-target-invalid', invalid);
         });
@@ -1197,6 +1375,56 @@
                 return;
             }
 
+            // Posts the drop to `route`, shows a success toast and reloads.
+            const postMove = (route, payload, successTitle) => {
+                fetch(route, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                }).then(async res => {
+                    const body = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(body.message || 'Move failed.');
+                    await Swal.fire({
+                        icon: 'success',
+                        title: successTitle,
+                        text: body.message,
+                        timer: 1200,
+                        showConfirmButton: false,
+                    });
+                    window.location.reload();
+                }).catch(err => Swal.fire({ icon: 'error', title: 'Cannot move', text: err.message }));
+            };
+
+            if (dragState.kind === 'availability') {
+                const targetHasCons = $(this).attr('data-has-consignors') === 'true';
+                if (targetHasCons || $(this).attr('data-status') !== 'empty') {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Cell not empty',
+                        text: 'Availability can only be moved onto an empty cell.',
+                    });
+                    return;
+                }
+                Swal.fire({
+                    title: 'Move availability?',
+                    html: `From <b>${src.truck}</b> ${src.date} ${src.location}<br>to <b>${tgt.truck}</b> ${tgt.date} ${tgt.location}`,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Move',
+                }).then(r => {
+                    if (!r.isConfirmed) return;
+                    postMove("{{ route('calendar.move-availability') }}", {
+                        source_truck: src.truck, source_date: src.date, source_location: src.location,
+                        target_truck: tgt.truck, target_date: tgt.date, target_location: tgt.location,
+                    }, 'Moved');
+                });
+                return;
+            }
+
             Swal.fire({
                 title: 'Move consignments?',
                 html: `From <b>${src.truck}</b> ${src.date} ${src.location}<br>to <b>${tgt.truck}</b> ${tgt.date} ${tgt.location}`,
@@ -1205,29 +1433,10 @@
                 confirmButtonText: 'Move',
             }).then(r => {
                 if (!r.isConfirmed) return;
-                fetch("{{ route('calendar.move-cell') }}", {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                        'Accept': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        source_truck: src.truck, source_date: src.date, source_location: src.location,
-                        target_truck: tgt.truck, target_date: tgt.date, target_location: tgt.location,
-                    }),
-                }).then(async res => {
-                    const body = await res.json().catch(() => ({}));
-                    if (!res.ok) throw new Error(body.message || 'Move failed.');
-                    await Swal.fire({
-                        icon: 'success',
-                        title: 'Moved',
-                        text: body.message,
-                        timer: 1200,
-                        showConfirmButton: false,
-                    });
-                    window.location.reload();
-                }).catch(err => Swal.fire({ icon: 'error', title: 'Cannot move', text: err.message }));
+                postMove("{{ route('calendar.move-cell') }}", {
+                    source_truck: src.truck, source_date: src.date, source_location: src.location,
+                    target_truck: tgt.truck, target_date: tgt.date, target_location: tgt.location,
+                }, 'Moved');
             });
         });
         // --- end drag-and-drop ---
