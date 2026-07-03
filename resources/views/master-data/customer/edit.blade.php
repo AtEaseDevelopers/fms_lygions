@@ -374,8 +374,8 @@
                                             @foreach (\App\Models\CustomerLocation::OPERATION_DAYS as $dayKey => $dayLabel)
                                                 <div style="display: flex; gap: 0.4rem; white-space: nowrap;">
                                                     <span style="width: 2.5rem; color: #6c757d;">{{ \Illuminate\Support\Str::substr($dayLabel, 0, 3) }}</span>
-                                                    @if ($hours[$dayKey] !== '')
-                                                        <span>{{ $hours[$dayKey] }}</span>
+                                                    @if ($hours[$dayKey]['start'] !== '' || $hours[$dayKey]['end'] !== '')
+                                                        <span>{{ $hours[$dayKey]['start'] !== '' ? $hours[$dayKey]['start'] : '—' }} - {{ $hours[$dayKey]['end'] !== '' ? $hours[$dayKey]['end'] : '—' }}</span>
                                                     @else
                                                         <span style="color: #adb5bd;">Closed</span>
                                                     @endif

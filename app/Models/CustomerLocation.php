@@ -173,10 +173,11 @@ class CustomerLocation extends Model
     }
 
     /**
-     * Per-day operation hours stored as a JSON map by the SNL app, e.g.
-     * {"monday":"8","tuesday":"8", ...}. Returns a normalised array with every
-     * day (in OPERATION_DAYS order); empty means the location is closed that
-     * day. View-only in FMS.
+     * Per-day operation hours stored as a JSON map by the SNL app, each value a
+     * {"start","end"} pair of 4-digit 24h times, e.g.
+     * {"monday":{"start":"0800","end":"1700"}, ...}. Returns a normalised array
+     * with every day (in OPERATION_DAYS order); a day with both times empty is
+     * closed. Legacy scalar values degrade to closed. View-only in FMS.
      */
     public function getOperationHoursArrayAttribute(): array
     {
@@ -188,8 +189,11 @@ class CustomerLocation extends Model
 
         $result = [];
         foreach (array_keys(self::OPERATION_DAYS) as $day) {
-            $value = $decoded[$day] ?? '';
-            $result[$day] = is_scalar($value) ? (string) $value : '';
+            $value = $decoded[$day] ?? [];
+            $result[$day] = [
+                'start' => is_array($value) && is_scalar($value['start'] ?? null) ? (string) $value['start'] : '',
+                'end' => is_array($value) && is_scalar($value['end'] ?? null) ? (string) $value['end'] : '',
+            ];
         }
 
         return $result;
