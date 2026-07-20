@@ -1368,6 +1368,22 @@
         const cancelAllBtn = document.getElementById('cancelAllBtn');
         const saveAllBtn = document.getElementById('saveAllBtn');
 
+        // Show the bulk Save/Cancel controls (used for edit-all and bulk-add)
+        function showBulkEditControls() {
+            editAllBtn.classList.add('d-none');
+            cancelAllBtn.classList.remove('d-none');
+            saveAllBtn.classList.remove('d-none');
+        }
+
+        // Reset the toolbar back to its idle state
+        function resetBulkEditControls() {
+            editAllMode = false;
+            editAllBtn.classList.remove('d-none');
+            cancelAllBtn.classList.add('d-none');
+            saveAllBtn.classList.add('d-none');
+            addInlineRowBtn.disabled = false;
+        }
+
         function convertRowToEdit(row) {
             const id = row.dataset.id;
 
@@ -1477,30 +1493,45 @@
                 </td>
                 <td class="sticky-col">EDIT</td>
                 <td class="sticky-col">
-                    <input type="date" class="form-control form-control-sm" name="load_date" value="${escapeAttr(loadDate)}" required>
+                    <div class="d-flex align-items-center gap-1">
+                        <input type="date" class="form-control form-control-sm" name="load_date" value="${escapeAttr(loadDate)}" required>
+                        <span class="text-danger">*</span>
+                    </div>
                 </td>
                 <td class="sticky-col">
-                    <input name="consignor" list="edit_consignor_list_${id}" class="form-control form-control-sm"
-                           placeholder="Consignor" value="${escapeAttr(consignor)}" required>
+                    <div class="d-flex align-items-center gap-1">
+                        <input name="consignor" list="edit_consignor_list_${id}" class="form-control form-control-sm"
+                               placeholder="Consignor" value="${escapeAttr(consignor)}" required>
+                        <span class="text-danger">*</span>
+                    </div>
                     <datalist id="edit_consignor_list_${id}">
                         ${consignorOptions}
                     </datalist>
                 </td>
                 <td class="sticky-col">
-                    <input type="text" class="form-control form-control-sm" name="pick_point" placeholder="Pick Point" value="${escapeAttr(pickPoint)}" required>
+                    <div class="d-flex align-items-center gap-1">
+                        <input type="text" class="form-control form-control-sm" name="pick_point" placeholder="Pick Point" value="${escapeAttr(pickPoint)}" required>
+                        <span class="text-danger">*</span>
+                    </div>
                     <input type="text" class="form-control form-control-sm mt-1" name="pick_address"
                            list="pick_address_list_${id}" placeholder="Pick Address" value="${escapeAttr(pickAddress)}">
                     <datalist id="pick_address_list_${id}"></datalist>
                 </td>
                 <td class="sticky-col">
-                    <input name="consignee" list="edit_consignee_list_${id}" class="form-control form-control-sm"
-                           placeholder="Consignee" value="${escapeAttr(consignee)}" required>
+                    <div class="d-flex align-items-center gap-1">
+                        <input name="consignee" list="edit_consignee_list_${id}" class="form-control form-control-sm"
+                               placeholder="Consignee" value="${escapeAttr(consignee)}" required>
+                        <span class="text-danger">*</span>
+                    </div>
                     <datalist id="edit_consignee_list_${id}">
                         ${consigneeOptions}
                     </datalist>
                 </td>
                 <td class="sticky-col">
-                    <input type="text" class="form-control form-control-sm" name="drop_point" placeholder="Drop Point" value="${escapeAttr(dropPoint)}" required>
+                    <div class="d-flex align-items-center gap-1">
+                        <input type="text" class="form-control form-control-sm" name="drop_point" placeholder="Drop Point" value="${escapeAttr(dropPoint)}" required>
+                        <span class="text-danger">*</span>
+                    </div>
                     <input type="text" class="form-control form-control-sm mt-1" name="drop_address"
                            list="drop_address_list_${id}" placeholder="Drop Address" value="${escapeAttr(dropAddress)}">
                     <datalist id="drop_address_list_${id}"></datalist>
@@ -1737,9 +1768,10 @@
         }
 
         addInlineRowBtn.addEventListener('click', function() {
-            // Check if there's already an inline edit row
-            if (document.querySelector('.inline-edit-row')) {
-                Swal.fire('Warning', 'Please save or cancel the current row first', 'warning');
+            // Allow adding multiple new rows at once, but not while existing rows are
+            // being edited (single-row edit or edit-all mode).
+            if (editAllMode || document.querySelector('.inline-edit-row[data-edit-id]')) {
+                Swal.fire('Warning', 'Please save or cancel the row you are editing first', 'warning');
                 return;
             }
 
@@ -1791,30 +1823,45 @@
         </td>
         <td class="sticky-col">NEW</td>
         <td class="sticky-col">
-            <input type="date" class="form-control form-control-sm" name="load_date" required>
+            <div class="d-flex align-items-center gap-1">
+                <input type="date" class="form-control form-control-sm" name="load_date" required>
+                <span class="text-danger">*</span>
+            </div>
         </td>
         <td class="sticky-col">
-            <input name="consignor" list="inline_consignor_list" class="form-control form-control-sm"
-                   placeholder="Consignor" required>
+            <div class="d-flex align-items-center gap-1">
+                <input name="consignor" list="inline_consignor_list" class="form-control form-control-sm"
+                       placeholder="Consignor" required>
+                <span class="text-danger">*</span>
+            </div>
             <datalist id="inline_consignor_list">
                 ${consignorOptions}
             </datalist>
         </td>
         <td class="sticky-col">
-            <input type="text" class="form-control form-control-sm" name="pick_point" placeholder="Pick Point" required>
+            <div class="d-flex align-items-center gap-1">
+                <input type="text" class="form-control form-control-sm" name="pick_point" placeholder="Pick Point" required>
+                <span class="text-danger">*</span>
+            </div>
             <input type="text" class="form-control form-control-sm mt-1" name="pick_address"
                    list="inline_pick_address_list" placeholder="Pick Address">
             <datalist id="inline_pick_address_list"></datalist>
         </td>
         <td class="sticky-col">
-            <input name="consignee" list="inline_consignee_list" class="form-control form-control-sm"
-                   placeholder="Consignee" required>
+            <div class="d-flex align-items-center gap-1">
+                <input name="consignee" list="inline_consignee_list" class="form-control form-control-sm"
+                       placeholder="Consignee" required>
+                <span class="text-danger">*</span>
+            </div>
             <datalist id="inline_consignee_list">
                 ${consigneeOptions}
             </datalist>
         </td>
         <td class="sticky-col">
-            <input type="text" class="form-control form-control-sm" name="drop_point" placeholder="Drop Point" required>
+            <div class="d-flex align-items-center gap-1">
+                <input type="text" class="form-control form-control-sm" name="drop_point" placeholder="Drop Point" required>
+                <span class="text-danger">*</span>
+            </div>
             <input type="text" class="form-control form-control-sm mt-1" name="drop_address"
                    list="inline_drop_address_list" placeholder="Drop Address">
             <datalist id="inline_drop_address_list"></datalist>
@@ -1924,8 +1971,8 @@
             // Recalculate sticky column positions
             recalculateStickyColumns();
 
-            // Disable add button while editing
-            addInlineRowBtn.disabled = true;
+            // Show bulk Save/Cancel controls; keep Add Row enabled so more rows can be added
+            showBulkEditControls();
 
             // Scroll to top
             window.scrollTo({
@@ -1998,7 +2045,16 @@
             if (e.target.matches('[name="consignor"]')) {
                 fetchAndFillLocations(row, e.target.value, 'consignor');
             } else if (e.target.matches('[name="consignee"]')) {
-                fetchAndFillLocations(row, e.target.value, 'consignee');
+                // "-" means no consignee/drop-off needed — auto-fill the drop-off
+                // fields with "-" instead of looking up saved locations.
+                if (e.target.value.trim() === '-') {
+                    const dropPointInput = row.querySelector('[name="drop_point"]');
+                    const dropAddressInput = row.querySelector('[name="drop_address"]');
+                    if (dropPointInput) dropPointInput.value = '-';
+                    if (dropAddressInput) dropAddressInput.value = '-';
+                } else {
+                    fetchAndFillLocations(row, e.target.value, 'consignee');
+                }
             }
         });
 
@@ -2138,15 +2194,9 @@
                         } else {
                             row.remove();
                         }
-                        // Check if no more edit rows remain — exit edit-all mode
+                        // If no more inline rows remain, reset the toolbar controls
                         if (!document.querySelector('.inline-edit-row')) {
-                            addInlineRowBtn.disabled = false;
-                            if (editAllMode) {
-                                editAllMode = false;
-                                editAllBtn.classList.remove('d-none');
-                                cancelAllBtn.classList.add('d-none');
-                                saveAllBtn.classList.add('d-none');
-                            }
+                            resetBulkEditControls();
                         }
                         recalculateStickyColumns();
                     }
@@ -2208,9 +2258,10 @@
                 cancelButtonText: 'No, keep editing'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    const editRows = tableBody.querySelectorAll('.inline-edit-row[data-edit-id]');
+                    const editRows = tableBody.querySelectorAll('.inline-edit-row');
                     editRows.forEach(row => {
-                        if (row._originalHTML) {
+                        if (row.dataset.editId && row._originalHTML) {
+                            // Existing row being edited — restore its original markup
                             const restoredRow = document.createElement('tr');
                             restoredRow.className = row._originalClassName;
                             restoredRow.innerHTML = row._originalHTML;
@@ -2222,14 +2273,13 @@
                             restoredRow.querySelectorAll('.delete-form').forEach(form => {
                                 form.addEventListener('submit', handleDeleteForm);
                             });
+                        } else {
+                            // New (unsaved) row — just remove it
+                            row.remove();
                         }
                     });
 
-                    editAllMode = false;
-                    editAllBtn.classList.remove('d-none');
-                    addInlineRowBtn.disabled = false;
-                    cancelAllBtn.classList.add('d-none');
-                    saveAllBtn.classList.add('d-none');
+                    resetBulkEditControls();
 
                     recalculateStickyColumns();
                 }
@@ -2238,7 +2288,7 @@
 
         // Save All button handler
         saveAllBtn.addEventListener('click', function() {
-            const editRows = tableBody.querySelectorAll('.inline-edit-row[data-edit-id]');
+            const editRows = tableBody.querySelectorAll('.inline-edit-row');
             if (editRows.length === 0) {
                 Swal.fire('Warning', 'No rows to save', 'warning');
                 return;
@@ -2265,7 +2315,11 @@
             });
 
             const promises = Array.from(editRows).map(row => {
-                const editId = row.dataset.editId;
+                const editId = row.dataset.editId; // present only for existing rows
+                const isEdit = !!editId;
+                const url = isEdit
+                    ? `/consignment-order/${editId}/update-inline`
+                    : "{{ route('consignment-order.store-inline') }}";
                 const formData = new FormData();
 
                 row.querySelectorAll('input, select').forEach(input => {
@@ -2280,7 +2334,10 @@
                     }
                 });
 
-                return fetch(`/consignment-order/${editId}/update-inline`, {
+                // New rows go through the store endpoint, which expects an express action
+                if (!isEdit) formData.append('express_action', 'swap');
+
+                return fetch(url, {
                     method: "POST",
                     headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
                     body: formData
@@ -2295,7 +2352,7 @@
                     } else {
                         Swal.fire({
                             icon: 'success',
-                            title: 'All rows updated!',
+                            title: 'All rows saved!',
                             timer: 2000,
                             showConfirmButton: false
                         }).then(() => { location.reload(); });

@@ -150,6 +150,37 @@
             </div>
         </div>
 
+        {{-- Colour legend: base states + special arrangements --}}
+        <div class="d-flex flex-wrap justify-content-center gap-3 mb-3 small">
+            @php
+                $legendBase = [
+                    ['label' => 'Available', 'color' => '#ffffff', 'border' => true],
+                    ['label' => 'Off / Weekend', 'color' => '#c3c2c2', 'border' => false],
+                    ['label' => 'Assigned (MY)', 'color' => '#f7c6c7', 'border' => false],
+                    ['label' => 'Assigned (SG)', 'color' => '#d1ecf1', 'border' => false],
+                ];
+            @endphp
+            @foreach ($legendBase as $item)
+                <span class="d-inline-flex align-items-center gap-1">
+                    <span style="display:inline-block; width:16px; height:16px; border-radius:3px;
+                        background-color:{{ $item['color'] }}; @if ($item['border']) border:1px solid #adb5bd; @endif"></span>
+                    {{ $item['label'] }}
+                </span>
+            @endforeach
+            @foreach (\App\Models\Availability::arrangementProfiles() as $key => $profile)
+                @continue(in_array($key, ['off-day', 'maintenance']))
+                <span class="d-inline-flex align-items-center gap-1">
+                    <span style="display:inline-block; width:16px; height:16px; border-radius:3px;
+                        background-color:{{ $profile['color'] }};"></span>
+                    {{ $profile['label'] }}
+                </span>
+            @endforeach
+            <span class="d-inline-flex align-items-center gap-1">
+                <span class="badge bg-danger" style="font-size:0.65rem;">On Leave</span>
+                Driver Leave
+            </span>
+        </div>
+
 
         <div class="table-responsive">
             <table class="table text-left table-bordered " style="table-layout: fixed;">
@@ -637,7 +668,7 @@
 
     <div class="modal fade" id="availabilityModal" tabindex="-1" aria-labelledby="availabilityModalLabel"
         aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content">
                 <!-- Header -->
                 <div class="modal-header">
@@ -653,90 +684,110 @@
                     <form id="availabilityForm" method="POST" action="{{ route('calendar.store') }}">
                         @csrf
 
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Status:</label>
-                            <select class="form-select" name="status" id="status" required>
-                                <option value="" disabled selected>-- Select Status --</option>
-                                <option value="available">Available</option>
-                                <option value="off-day">Off day</option>
-                                <option value="maintenance">Maintenance</option>
-                            </select>
-                        </div>
+                        <div class="row g-2">
+                            <!-- Column 1: Basic -->
+                            <div class="col-lg-4">
+                                <div class="border rounded p-3 h-100" style="background:#fafafa;">
+                                    <h6 class="mb-3 fw-bold text-uppercase text-muted" style="font-size:0.8rem; letter-spacing:0.5px;">
+                                        <i class="bi bi-info-circle me-1"></i> Basic
+                                    </h6>
 
-                        <div class="mb-3" id="date-container">
-                            <label class="form-label fw-bold">Date:</label>
-                            <input type="date" name="date" class="form-control" required>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label fw-bold" id="location-label">Location:</label>
-                            <select class="form-select" name="location" required>
-                                <option value="" disabled selected>-- Select Location --</option>
-                                <option value="MY">MY</option>
-                                <option value="SG">SG</option>
-                            </select>
-                        </div>
-
-                        <!--<div class="mb-3">
-                                                                                                                    <label class="form-label fw-bold">Truck Type:</label>
-                                                                                                                    <select class="form-select" name="truck_type" required>
-                                                                                                                    <option value="">-- Select Truck Type --</option>
-                                                                                                                    <option>SNL 20#</option>
-                                                                                                                    <option>SNL 40#</option>
-                                                                                                                    <option>20 footer & below</option>
-                                                                                                                    </select>
-                                                                                                                    </div>-->
-
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Truck Team:</label>
-                            <select class="form-select" name="team" id="teamSelect">
-                                <option value="" selected>-- Filter by Team (optional) --</option>
-                                <option value="MY">MY Team</option>
-                                <option value="SG">SG Team</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Trucks:</label>
-                            <input type="text" id="truckSearch" class="form-control mb-2"
-                                placeholder="Search Truck Number...">
-
-                            <div class="mb-1">
-                                <input type="checkbox" id="selectAllTrucks" style="width:1.25em; height:1.25em; cursor:pointer; vertical-align:middle;">
-                                <label for="selectAllTrucks" style="cursor:pointer; vertical-align:middle; font-weight:600;">Select All</label>
-                            </div>
-                            <div id="truckCheckboxContainer" class="border rounded p-2"
-                                style="max-height: 220px; overflow-y: auto; background-color: #f8f9fa; display: grid; grid-template-columns: 1fr 1fr;">
-                                @foreach ($trucks_select as $truck)
-                                    @continue(($truck['source'] ?? 'truck') !== 'truck')
-                                    <div class="truck-item" data-team="{{ $truck['team'] }}"
-                                        data-number="{{ strtolower($truck['number']) }}"
-                                        style="display:flex; align-items:center; gap:0.5rem; padding: 2px 4px;">
-                                        <input type="checkbox" name="truck_numbers[]"
-                                            id="truck_{{ $truck['id'] }}" value="{{ $truck['number'] }}"
-                                            style="width:1.25em; height:1.25em; flex-shrink:0; cursor:pointer;">
-                                        <label class="mb-0" for="truck_{{ $truck['id'] }}" style="cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                                            {{ $truck['number'] }}
-                                            @if (!empty($truck['team']))
-                                                <small class="text-muted ms-1">{{ $truck['team'] }} Team</small>
-                                            @endif
-                                        </label>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Status:</label>
+                                        <select class="form-select" name="status" id="status" required>
+                                            <option value="" disabled selected>-- Select Status --</option>
+                                            <option value="available">Available</option>
+                                            <option value="off-day">Off day</option>
+                                            <option value="maintenance">Maintenance</option>
+                                            <optgroup label="Special Arrangements">
+                                                <option value="driver-leave">Driver Leave</option>
+                                                <option value="holiday">Holiday</option>
+                                                <option value="breakdown">Breakdown</option>
+                                                <option value="express">Express</option>
+                                                <option value="inspection">Inspection</option>
+                                                <option value="saturday-loading">Saturday Loading (KL)</option>
+                                                <option value="saturday-unloading">Saturday Unloading (SG)</option>
+                                            </optgroup>
+                                        </select>
                                     </div>
-                                @endforeach
-                            </div>
-                            <small id="selectedCount" class="text-muted mb-1 d-block">0 selected</small>
 
-                            <div id="selectedList" class="mt-2 text-muted" style="font-size: 0.9rem;">
-                                <!-- Selected truck numbers will appear here -->
-                            </div>
-                        </div>
+                                    <div class="mb-3" id="date-container">
+                                        <label class="form-label fw-bold">Date:</label>
+                                        <input type="date" name="date" class="form-control" required>
+                                    </div>
 
-                        <div id="tempSubconSection" class="border rounded p-3 mb-3" style="background:#fafafa;">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h6 class="mb-0 fw-bold">Subcons (Temporary)</h6>
-                                <small class="text-muted">Reserve placeholders by type/size; assign a real subcon later from the calendar.</small>
+                                    <div class="mb-0">
+                                        <label class="form-label fw-bold" id="location-label">Location:</label>
+                                        <select class="form-select" name="location" required>
+                                            <option value="" disabled selected>-- Select Location --</option>
+                                            <option value="MY">MY</option>
+                                            <option value="SG">SG</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div id="tempSubconRows">
+                            <!-- Column 2: Truck -->
+                            <div class="col-lg-4">
+                                <div class="border rounded p-3 h-100" style="background:#fafafa;">
+                                    <h6 class="mb-3 fw-bold text-uppercase text-muted" style="font-size:0.8rem; letter-spacing:0.5px;">
+                                        <i class="bi bi-truck me-1"></i> Truck
+                                    </h6>
+
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Truck Team:</label>
+                                        <select class="form-select" name="team" id="teamSelect">
+                                            <option value="" selected>-- Filter by Team (optional) --</option>
+                                            <option value="MY">MY Team</option>
+                                            <option value="SG">SG Team</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-0">
+                                        <label class="form-label fw-bold">Trucks:</label>
+                                        <input type="text" id="truckSearch" class="form-control mb-2"
+                                            placeholder="Search Truck Number...">
+
+                                        <div class="mb-1">
+                                            <input type="checkbox" id="selectAllTrucks" style="width:1.25em; height:1.25em; cursor:pointer; vertical-align:middle;">
+                                            <label for="selectAllTrucks" style="cursor:pointer; vertical-align:middle; font-weight:600;">Select All</label>
+                                        </div>
+                                        <div id="truckCheckboxContainer" class="border rounded p-2"
+                                            style="max-height: 220px; overflow-y: auto; background-color: #fff; display: grid; grid-template-columns: 1fr 1fr;">
+                                            @foreach ($trucks_select as $truck)
+                                                @continue(($truck['source'] ?? 'truck') !== 'truck')
+                                                <div class="truck-item" data-team="{{ $truck['team'] }}"
+                                                    data-number="{{ strtolower($truck['number']) }}"
+                                                    style="display:flex; align-items:center; gap:0.5rem; padding: 2px 4px;">
+                                                    <input type="checkbox" name="truck_numbers[]"
+                                                        id="truck_{{ $truck['id'] }}" value="{{ $truck['number'] }}"
+                                                        style="width:1.25em; height:1.25em; flex-shrink:0; cursor:pointer;">
+                                                    <label class="mb-0" for="truck_{{ $truck['id'] }}" style="cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                                        {{ $truck['number'] }}
+                                                        @if (!empty($truck['team']))
+                                                            <small class="text-muted ms-1">{{ $truck['team'] }} Team</small>
+                                                        @endif
+                                                    </label>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                        <small id="selectedCount" class="text-muted mb-1 d-block">0 selected</small>
+
+                                        <div id="selectedList" class="mt-2 text-muted" style="font-size: 0.9rem;">
+                                            <!-- Selected truck numbers will appear here -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Column 3: Subcons -->
+                            <div class="col-lg-4">
+                                <div id="tempSubconSection" class="border rounded p-3 h-100" style="background:#fafafa;">
+                                    <h6 class="mb-1 fw-bold text-uppercase text-muted" style="font-size:0.8rem; letter-spacing:0.5px;">
+                                        <i class="bi bi-people me-1"></i> Subcons (Temporary)
+                                    </h6>
+                                    <small class="text-muted d-block mb-3">Reserve placeholders by type/size; assign a real subcon later from the calendar.</small>
+
+                                    <div id="tempSubconRows">
                                 <div class="temp-subcon-row border rounded p-2 mb-2 position-relative" style="background:#fff; padding-right:32px !important;">
                                     <button type="button" class="btn btn-sm btn-link text-danger removeTempRow p-0"
                                         style="position:absolute; top:4px; right:8px; display:none; font-size:1.4rem; line-height:1; text-decoration:none; font-weight:bold;"
@@ -776,14 +827,15 @@
                                     </div>
                                 </div>
                             </div>
-                            <button type="button" class="btn btn-sm btn-outline-primary addTempRow">
-                                + Add another type
-                            </button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary addTempRow">
+                                        + Add another type
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
-
                         <!-- Footer (inside form) -->
-                        <div class="modal-footer">
+                        <div class="modal-footer border-0">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">CANCEL</button>
                             <button type="submit" class="btn btn-primary">SUBMIT</button>
                         </div>
@@ -896,6 +948,10 @@
         padding-left: 0 !important;
         min-width: 0;
     }
+
+    /* Special-arrangement cells: click to delete, subtle hover cue */
+    .arrangement-cell { cursor: pointer; }
+    .arrangement-cell:hover { filter: brightness(0.92); }
 
     .availability-cell[draggable="true"] { cursor: grab; }
     .availability-cell.dragging { opacity: 0.4; }
@@ -1047,6 +1103,9 @@
         });
     }
     document.addEventListener('DOMContentLoaded', function() {
+        // Availability statuses that render as a deletable "special arrangement" cell.
+        const ARRANGEMENT_STATUSES = ['off-day', 'maintenance', 'holiday', 'breakdown',
+            'express', 'inspection', 'saturday-loading', 'saturday-unloading'];
         const teamSelect = document.getElementById('teamSelect');
         const searchInput = document.getElementById('truckSearch');
         const truckItems = document.querySelectorAll('.truck-item');
@@ -1330,7 +1389,7 @@
                     || status !== 'empty';
             } else {
                 invalid = (this === dragState.el)
-                    || ['off-day', 'maintenance'].includes(status)
+                    || ARRANGEMENT_STATUSES.includes(status)
                     || crossTruck
                     || crossLoc;
             }
@@ -1450,7 +1509,7 @@
             const hasConsignors = $cell.data('has-consignors') === true || $cell.data(
                 'has-consignors') === 'true';
 
-            if (['off-day', 'maintenance'].includes(status)) {
+            if (ARRANGEMENT_STATUSES.includes(status)) {
                 // Delete popup
                 Swal.fire({
                     title: 'Delete this availability?',

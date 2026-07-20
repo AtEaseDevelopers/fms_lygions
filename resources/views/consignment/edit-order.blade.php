@@ -64,12 +64,12 @@
                 <div class="modal-body row g-3">
                     {{-- First row: Load Date & Consignment No --}}
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Pick Up Date</label>
+                        <label class="form-label fw-bold">Pick Up Date <span class="text-danger">*</span></label>
                         <input type="date" class="form-control date-clickable" name="load_date"
                             id="load_date_{{ $index }}" value="{{ $order['load_date'] }}">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Status</label>
+                        <label class="form-label fw-bold">Status <span class="text-danger">*</span></label>
                         <select class="form-select" name="status">
                             <option value="Pending" {{ $order['status'] == 'Pending' ? 'selected' : '' }}>
                                 Pending</option>
@@ -129,7 +129,7 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Pick Point</label>
+                        <label class="form-label fw-bold">Pick Point <span class="text-danger">*</span></label>
                         <input id="pick_point_{{ $index }}" name="pick_point"
                             list="pick_point_list_{{ $index }}" class="form-control"
                             placeholder="Select or Search Pick Point" value="{{ $order['pick_point'] }}">
@@ -137,7 +137,7 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Drop Point</label>
+                        <label class="form-label fw-bold">Drop Point <span class="text-danger">*</span></label>
                         <input id="drop_point_{{ $index }}" name="drop_point"
                             list="drop_point_list_{{ $index }}" class="form-control"
                             placeholder="Select or Search Drop Point" value="{{ $order['drop_point'] }}">
@@ -145,7 +145,7 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Pick Address</label>
+                        <label class="form-label fw-bold">Pick Address <span class="text-danger">*</span></label>
                         <input id="pick_address_{{ $index }}" name="pick_address"
                             list="pick_address_list_{{ $index }}" class="form-control"
                             placeholder="Select or Search Pick Address" value="{{ $order['pick_address'] }}">
@@ -153,7 +153,7 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Drop Address</label>
+                        <label class="form-label fw-bold">Drop Address <span class="text-danger">*</span></label>
                         <input id="drop_address_{{ $index }}" name="drop_address"
                             list="drop_address_list_{{ $index }}" class="form-control"
                             placeholder="Select or Search Drop Address" value="{{ $order['drop_address'] }}">

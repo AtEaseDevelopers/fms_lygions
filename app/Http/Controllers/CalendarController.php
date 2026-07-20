@@ -469,9 +469,59 @@ class CalendarController extends Controller
                     ],
                 ];
             }
+
+            // Layer the MY<->SG "flow" greying on top of this truck's cells.
+            if (isset($calendarMatrix[$truck->number])) {
+                $this->applyAvailabilityFlow($calendarMatrix[$truck->number], $dates);
+            }
         }
 
         return [$calendarMatrix, $trucks];
+    }
+
+    /**
+     * When a truck is assigned (has consignments) on a day, it is committed to that
+     * location and unavailable on the opposite one. As it moves MY<->SG on following
+     * days the unavailable side alternates, tracing a zig-zag of grey cells until the
+     * work-week ends (weekends reset it). Marks those cells with 'flow_off' => true.
+     *
+     * On the assignment day (k=0) the opposite side is greyed; each following weekday
+     * the greyed side flips. A real assignment always keeps its solid colour and is
+     * never overwritten by the flow.
+     */
+    private function applyAvailabilityFlow(array &$truckDates, $dates): void
+    {
+        $ordered = $dates->map(fn($d) => $d['date']->format('Y-m-d'))->values()->all();
+        $opposite = ['MY' => 'SG', 'SG' => 'MY'];
+        $grey = [];
+        $n = count($ordered);
+
+        for ($i = 0; $i < $n; $i++) {
+            $dk = $ordered[$i];
+            if (!isset($truckDates[$dk])) continue;
+
+            foreach (['MY', 'SG'] as $loc) {
+                $assigned = ($truckDates[$dk][$loc]['consignors'] ?? collect())->isNotEmpty();
+                if (!$assigned) continue;
+
+                // Propagate the alternating grey forward until the weekend.
+                for ($j = $i; $j < $n; $j++) {
+                    $djk = $ordered[$j];
+                    if (Carbon::parse($djk)->dayOfWeekIso >= 6) break; // Sat/Sun stop the flow
+                    $greySide = (($j - $i) % 2 === 0) ? $opposite[$loc] : $loc;
+                    $grey[$djk][$greySide] = true;
+                }
+            }
+        }
+
+        foreach ($grey as $djk => $sides) {
+            foreach (array_keys($sides) as $side) {
+                if (!isset($truckDates[$djk][$side])) continue;
+                // A real assignment always wins over the flow-grey.
+                if (($truckDates[$djk][$side]['consignors'] ?? collect())->isNotEmpty()) continue;
+                $truckDates[$djk][$side]['flow_off'] = true;
+            }
+        }
     }
     public function getCellDetails(Request $request)
     {
@@ -827,6 +877,30 @@ class CalendarController extends Controller
 
             $truckId = $truckData['source'] === 'truck' ? $truckData['id'] : null;
             $subconId = $truckData['source'] === 'subcon' ? $truckData['id'] : null;
+
+            // Driver leave ties into the existing Driver Holiday system rather than
+            // creating an availability row, so it stays consistent with the on-leave logic.
+            if ($status === 'driver-leave') {
+                $request->validate(['date' => 'required|date']);
+                if (!$truckId) {
+                    \Log::warning("Driver leave needs a truck (not subcon): $truckNumber");
+                    continue;
+                }
+                $driver = Driver::where('default_lorry_id', $truckId)->first();
+                if (!$driver) {
+                    \Log::warning("No default driver for truck $truckNumber; driver-leave skipped");
+                    continue;
+                }
+                DriverHoliday::firstOrCreate(
+                    [
+                        'driver_id'  => $driver->id,
+                        'start_date' => $validated['date'],
+                        'end_date'   => $validated['date'],
+                    ],
+                    ['remarks' => 'Driver leave (calendar)']
+                );
+                continue;
+            }
 
             if ($status === 'available') {
                 if (empty($validated['date_range'])) {

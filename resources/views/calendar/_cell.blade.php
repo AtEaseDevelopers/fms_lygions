@@ -4,23 +4,48 @@
     $total_capacity = $cellData['total_capacity'] ?? 0;
     $consignors = $cellData['consignors'] ?? collect();
 
+    $isAssigned = $consignors->isNotEmpty();
+    $isWeekend = \Carbon\Carbon::parse($dateOnly)->isWeekend();
+    // Flow-off: truck is committed on the OTHER location as it moves MY<->SG across
+    // the work-week (computed in CalendarController::applyAvailabilityFlow).
+    $flowOff = $cellData['flow_off'] ?? false;
+
     $occupiedColor = $location === 'SG' ? '#d1ecf1' : '#f7c6c7';
-    $cellStyle = $consignors->isNotEmpty()
-        ? 'background-color: ' . $occupiedColor . ';'
-        : match ($status) {
-            'available' => 'background-color: #ffffff;',
-            default => 'background-color: #c3c2c2;',
-        };
+    // Special-arrangement colour + label (off-day, maintenance, holiday, breakdown,
+    // express, inspection, saturday-loading/unloading). Null for plain statuses.
+    $profile = \App\Models\Availability::arrangementProfiles()[$status] ?? null;
+
+    if ($isAssigned) {
+        // Truck planning assigned -> solid MY (pink) / SG (blue); overrides weekend
+        $cellStyle = 'background-color: ' . $occupiedColor . ';';
+    } elseif ($profile) {
+        // Special arrangement -> its own colour profile
+        $cellStyle = 'background-color: ' . $profile['color'] . ';';
+    } elseif ($flowOff) {
+        // Truck is away on this side today (part of the MY<->SG flow) -> grey
+        $cellStyle = 'background-color: #c3c2c2;';
+    } elseif ($status === 'available') {
+        // Explicitly marked available -> white, even on weekends
+        $cellStyle = 'background-color: #ffffff;';
+    } elseif ($isWeekend) {
+        // Weekends are off by default
+        $cellStyle = 'background-color: #c3c2c2;';
+    } else {
+        // Default: everything is available (white)
+        $cellStyle = 'background-color: #ffffff;';
+    }
 
     $driverOnLeave = $cellData['driver_on_leave'] ?? false;
     $driverOverridden = $cellData['driver_overridden'] ?? false;
 @endphp
-<td class="p-2 availability-cell @if ($driverOnLeave) border border-danger border-2 @endif"
+<td class="p-2 availability-cell @if ($profile) arrangement-cell @endif @if ($driverOnLeave) border border-danger border-2 @endif"
     style="{{ $cellStyle }}"
     @if ($consignors->isNotEmpty() || $status === 'available') draggable="true" @endif
     data-truck="{{ $truckNumber }}" data-location="{{ $location }}" data-date="{{ $dateOnly }}"
     data-status="{{ $status }}"
-    data-has-consignors="{{ $consignors->isNotEmpty() ? 'true' : 'false' }}">
+    data-weekend="{{ $isWeekend ? 'true' : 'false' }}"
+    data-flow-off="{{ $flowOff ? 'true' : 'false' }}"
+    data-has-consignors="{{ $isAssigned ? 'true' : 'false' }}">
     @if ($driverOverridden)
         <div class="text-end" style="line-height: 1;">
             <i class="bi bi-person-fill-gear text-secondary" style="font-size: 0.95rem;"></i>
@@ -60,13 +85,10 @@
             </span>
         </div>
     @endif
-    @if (in_array($status, ['off-day', 'maintenance']))
+    @if ($profile)
         <div class="mt-1 text-center">
-            <span
-                class="badge
-                    @if ($status === 'off-day') bg-secondary
-                    @else bg-warning text-dark @endif mb-1">
-                {{ ucfirst($status) }}
+            <span class="badge mb-1" style="background-color: rgba(0,0,0,0.6); color:#fff;">
+                {{ $profile['label'] }}
             </span>
         </div>
     @endif

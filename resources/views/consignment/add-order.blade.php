@@ -89,12 +89,12 @@
                 <div class="modal-body row g-3">
                     {{-- First row: Load Date & Status --}}
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Pick Up Date</label>
+                        <label class="form-label fw-bold">Pick Up Date <span class="text-danger">*</span></label>
                         <input type="date" class="form-control date-clickable" name="load_date" id="load_date"
                             required>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Status</label>
+                        <label class="form-label fw-bold">Status <span class="text-danger">*</span></label>
                         <select class="form-select" name="status" required>
                             <option value="Pending">Pending</option>
                             <option value="Planning">Planning</option>
@@ -143,28 +143,28 @@
 
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Pick Point </label>
+                        <label class="form-label fw-bold">Pick Point <span class="text-danger">*</span></label>
                         <input id="pick_point" name="pick_point" list="pick_point_list" class="form-control"
                             placeholder="Select or Search Pick Point" required>
                         <datalist id="pick_point_list"></datalist>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Drop Point</label>
+                        <label class="form-label fw-bold">Drop Point <span class="text-danger">*</span></label>
                         <input id="drop_point" name="drop_point" list="drop_point_list" class="form-control"
                             placeholder="Select or Search Drop Point" required>
                         <datalist id="drop_point_list"></datalist>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Pick Address</label>
+                        <label class="form-label fw-bold">Pick Address <span class="text-danger">*</span></label>
                         <input id="pick_address" name="pick_address" list="pick_address_list" class="form-control"
                             placeholder="Select or Search Pick Address" required>
                         <datalist id="pick_address_list"></datalist>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-bold">Drop Address</label>
+                        <label class="form-label fw-bold">Drop Address <span class="text-danger">*</span></label>
                         <input id="drop_address" name="drop_address" list="drop_address_list" class="form-control"
                             placeholder="Select or Search Drop Address" required>
                         <datalist id="drop_address_list"></datalist>
