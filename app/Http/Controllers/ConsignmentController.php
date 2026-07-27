@@ -130,15 +130,10 @@ class ConsignmentController extends Controller
                 : 0;
         }
 
-        // Filter trucks to only those available or occupied on the selected truck date
-        $availableTruckIds = Availability::where('date', $truckDate)
-            ->whereIn('status', ['available', 'occupied'])
-            ->pluck('truck_id')
-            ->unique();
-
-        $trucks_no = $trucks_no->filter(function ($truck) use ($availableTruckIds) {
-            return $availableTruckIds->contains($truck->id);
-        });
+        // Trucks are available by default on weekdays; the availabilities table only
+        // records off-days/exceptions (see truckAvailabilityChecker).
+        $isAvailable = $this->truckAvailabilityChecker($truckDate);
+        $trucks_no = $trucks_no->filter(fn($truck) => $isAvailable($truck->id));
 
         $customers = Customer::all();
 
@@ -211,25 +206,60 @@ class ConsignmentController extends Controller
         return $trimmed === '' ? null : $trimmed;
     }
 
+    /**
+     * Availability statuses that mark a truck as NOT operating on a given date.
+     * Everything else (express, saturday-loading/unloading, available, occupied, or
+     * no record at all) leaves the truck available.
+     */
+    private const UNAVAILABLE_STATUSES = ['off-day', 'maintenance', 'holiday', 'breakdown', 'inspection'];
+
+    /**
+     * Trucks are available by DEFAULT on weekdays; the availabilities table only records
+     * exceptions. A truck is unavailable for $date when it has a record with one of the
+     * non-working statuses (see UNAVAILABLE_STATUSES). On weekends (Sat/Sun) trucks are
+     * NOT available by default — they must have a positive availability record (e.g.
+     * saturday-loading/unloading, express, available) to show, and no blocking record.
+     *
+     * Returns a closure fn(int $truckId): bool used to filter truck collections.
+     */
+    private function truckAvailabilityChecker(string $date): \Closure
+    {
+        $records = Availability::whereDate('date', $date)->get(['truck_id', 'status']);
+
+        $offIds = $records->whereIn('status', self::UNAVAILABLE_STATUSES)
+            ->pluck('truck_id')->unique();
+        $onIds = $records->whereNotIn('status', self::UNAVAILABLE_STATUSES)
+            ->pluck('truck_id')->unique();
+
+        $isWeekend = Carbon::parse($date)->dayOfWeekIso >= 6; // 6 = Sat, 7 = Sun
+
+        return function ($truckId) use ($offIds, $onIds, $isWeekend) {
+            if ($offIds->contains($truckId)) {
+                return false;
+            }
+            // Weekdays: available unless explicitly marked off.
+            // Weekends: require a positive record.
+            return $isWeekend ? $onIds->contains($truckId) : true;
+        };
+    }
+
     public function getAvailableTrucks(Request $request)
     {
         $date = $request->input('date', now()->format('Y-m-d'));
 
         $trucks = $this->getTrucksWithCapacity($date);
 
-        // Filter by availability status
-        $availableTruckIds = Availability::where('date', $date)
-            ->whereIn('status', ['available', 'occupied'])
-            ->pluck('truck_id')
-            ->unique();
+        $isAvailable = $this->truckAvailabilityChecker($date);
 
+        // Subcons that have been explicitly marked off for the date (they are not
+        // default-available the way owned trucks are, so keep the positive-record rule).
         $availableSubconIds = Availability::where('date', $date)
-            ->whereIn('status', ['available', 'occupied'])
+            ->whereNotIn('status', self::UNAVAILABLE_STATUSES)
             ->whereNotNull('subcon_id')
             ->pluck('subcon_id')
             ->unique();
 
-        $available = $trucks->filter(fn($t) => $availableTruckIds->contains($t->id) && $t->remaining > 0);
+        $available = $trucks->filter(fn($t) => $isAvailable($t->id) && $t->remaining > 0);
 
         $subcons = Subcon::select('id', 'truck_no', 'chassis_type', 'size')->get()
             ->filter(fn($s) => $availableSubconIds->contains($s->id));

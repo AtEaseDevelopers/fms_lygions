@@ -5,6 +5,9 @@
     $consignors = $cellData['consignors'] ?? collect();
 
     $isAssigned = $consignors->isNotEmpty();
+    // A default-available weekday cell has no backing availability row, so it can't be
+    // dragged to relocate a record (only explicitly-recorded 'available' cells can).
+    $hasRecord = $cellData['has_record'] ?? false;
     $isWeekend = \Carbon\Carbon::parse($dateOnly)->isWeekend();
     // Flow-off: truck is committed on the OTHER location as it moves MY<->SG across
     // the work-week (computed in CalendarController::applyAvailabilityFlow).
@@ -40,7 +43,7 @@
 @endphp
 <td class="p-2 availability-cell @if ($profile) arrangement-cell @endif @if ($driverOnLeave) border border-danger border-2 @endif"
     style="{{ $cellStyle }}"
-    @if ($consignors->isNotEmpty() || $status === 'available') draggable="true" @endif
+    @if ($consignors->isNotEmpty() || ($status === 'available' && $hasRecord)) draggable="true" @endif
     data-truck="{{ $truckNumber }}" data-location="{{ $location }}" data-date="{{ $dateOnly }}"
     data-status="{{ $status }}"
     data-weekend="{{ $isWeekend ? 'true' : 'false' }}"

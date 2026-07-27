@@ -94,7 +94,10 @@ class CalendarController extends Controller
 
                 foreach (['MY', 'SG'] as $loc) {
                     $status = $day[$loc]['status'] ?? 'empty';
-                    if (in_array($status, ['available', 'occupied'])) {
+                    // Skip cells where the truck is committed on the opposite side today
+                    // (flow_off) — it isn't available here, so don't count its capacity.
+                    $flowOff = $day[$loc]['flow_off'] ?? false;
+                    if (!$flowOff && in_array($status, ['available', 'occupied'])) {
                         if ($loc === 'MY') {
                             $myOrigin += $day[$loc]['total_capacity'] ?? 0;
                             $myBalance += $day[$loc]['used_capacity'] ?? 0;
@@ -394,6 +397,10 @@ class CalendarController extends Controller
 
             foreach ($dates as $date) {
                 $formattedDate = $date['date']->format('Y-m-d');
+                // Trucks are available by default on weekdays; the availabilities table only
+                // records off-days/exceptions. Weekends are off by default.
+                $isWeekend = $date['date']->isWeekend();
+                $defaultStatus = $isWeekend ? 'empty' : 'available';
                 $key = $truck->number . '-' . $formattedDate;
                 $availKey = $truck->id . '-' . $formattedDate;
 
@@ -446,7 +453,10 @@ class CalendarController extends Controller
 
                 $calendarMatrix[$truck->number][$formattedDate] = [
                     'MY' => [
-                        'status' => $myAvailability->status ?? ($myConsignments->isNotEmpty() ? 'occupied' : 'empty'),
+                        'status' => $myAvailability->status ?? ($myConsignments->isNotEmpty() ? 'occupied' : $defaultStatus),
+                        // Distinguishes an explicit availability record from a default-available
+                        // weekday cell (which has no row to drag/relocate).
+                        'has_record' => $myAvailability !== null,
                         'consignors' => $myConsignments->pluck('consignor'),
                         'total_capacity' => optional($truck)->floor_space ?? 0,
                         'used_capacity' => $usedMy,
@@ -457,7 +467,8 @@ class CalendarController extends Controller
                         'driver_overridden' => $isOverridden,
                     ],
                     'SG' => [
-                        'status' => $sgAvailability->status ?? ($sgConsignments->isNotEmpty() ? 'occupied' : 'empty'),
+                        'status' => $sgAvailability->status ?? ($sgConsignments->isNotEmpty() ? 'occupied' : $defaultStatus),
+                        'has_record' => $sgAvailability !== null,
                         'consignors' => $sgConsignments->pluck('consignor'),
                         'total_capacity' => optional($truck)->floor_space ?? 0,
                         'used_capacity' => $usedSg,
