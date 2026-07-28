@@ -1363,6 +1363,29 @@
                 .replace(/`/g, '&#96;').replace(/\$/g, '&#36;');
         }
 
+        // Required fields for an inline truck planning row.
+        const REQUIRED_INLINE_FIELDS = ['load_date', 'consignor', 'consignee', 'pick_point', 'drop_point'];
+
+        // Remove any red-box error highlighting from a row's inputs.
+        function clearRowFieldErrors(row) {
+            row.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
+        }
+
+        // Highlight empty required fields in an inline row with a red box.
+        // Returns the list of invalid field names (empty = valid).
+        function validateInlineRow(row) {
+            clearRowFieldErrors(row);
+            const invalid = [];
+            REQUIRED_INLINE_FIELDS.forEach(name => {
+                const input = row.querySelector(`[name="${name}"]`);
+                if (input && !input.value.trim()) {
+                    input.classList.add('field-error');
+                    invalid.push(name);
+                }
+            });
+            return invalid;
+        }
+
         let editAllMode = false;
         const editAllBtn = document.getElementById('editAllBtn');
         const cancelAllBtn = document.getElementById('cancelAllBtn');
@@ -2058,6 +2081,13 @@
             }
         });
 
+        // Clear the red-box highlight as soon as the user edits a flagged field
+        tableBody.addEventListener('input', function(e) {
+            if (e.target.classList && e.target.classList.contains('field-error') && e.target.value.trim()) {
+                e.target.classList.remove('field-error');
+            }
+        });
+
         // Event delegation for save/cancel buttons
         tableBody.addEventListener('click', function(e) {
             // Save inline row (both add and edit)
@@ -2080,15 +2110,10 @@
                     }
                 });
 
-                // Validate required fields
-                const loadDate = row.querySelector('[name="load_date"]').value;
-                const consignor = row.querySelector('[name="consignor"]').value;
-                const consignee = row.querySelector('[name="consignee"]').value;
-                const pickPoint = row.querySelector('[name="pick_point"]').value;
-                const dropPoint = row.querySelector('[name="drop_point"]').value;
-
-                if (!loadDate || !consignor || !consignee || !pickPoint || !dropPoint) {
-                    Swal.fire('Error', 'Please fill in all required fields', 'error');
+                // Validate required fields (highlights empty ones with a red box)
+                const invalidFields = validateInlineRow(row);
+                if (invalidFields.length) {
+                    Swal.fire('Error', 'Please fill in all required fields (highlighted in red)', 'error');
                     return;
                 }
 
@@ -2294,18 +2319,16 @@
                 return;
             }
 
-            // Validate all rows first
-            for (const row of editRows) {
-                const loadDate = row.querySelector('[name="load_date"]')?.value;
-                const consignor = row.querySelector('[name="consignor"]')?.value;
-                const consignee = row.querySelector('[name="consignee"]')?.value;
-                const pickPoint = row.querySelector('[name="pick_point"]')?.value;
-                const dropPoint = row.querySelector('[name="drop_point"]')?.value;
-
-                if (!loadDate || !consignor || !consignee || !pickPoint || !dropPoint) {
-                    Swal.fire('Error', 'Please fill in all required fields in every row', 'error');
-                    return;
-                }
+            // Validate all rows first (highlights every empty required field with a red box)
+            let firstInvalidRow = null;
+            editRows.forEach(row => {
+                const invalidFields = validateInlineRow(row);
+                if (invalidFields.length && !firstInvalidRow) firstInvalidRow = row;
+            });
+            if (firstInvalidRow) {
+                Swal.fire('Error', 'Please fill in all required fields in every row (highlighted in red)', 'error');
+                firstInvalidRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
             }
 
             Swal.fire({
@@ -2469,6 +2492,13 @@
 </script>
 
 <style>
+    /* Red-box highlight for required inline fields left empty on save */
+    .field-error,
+    .field-error:focus {
+        border: 2px solid #dc3545 !important;
+        box-shadow: 0 0 0 0.15rem rgba(220, 53, 69, 0.25) !important;
+    }
+
     /* Inline editing row styles */
     .inline-edit-row {
         background-color: #fff3cd !important;
