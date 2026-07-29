@@ -130,8 +130,8 @@ class ConsignmentController extends Controller
                 : 0;
         }
 
-        // Trucks are available by default on weekdays; the availabilities table only
-        // records off-days/exceptions (see truckAvailabilityChecker).
+        // Trucks are NOT available by default — only those with a positive availability
+        // record for the date show in the truck filter (see truckAvailabilityChecker).
         $isAvailable = $this->truckAvailabilityChecker($truckDate);
         $trucks_no = $trucks_no->filter(fn($truck) => $isAvailable($truck->id));
 
@@ -214,11 +214,10 @@ class ConsignmentController extends Controller
     private const UNAVAILABLE_STATUSES = ['off-day', 'maintenance', 'holiday', 'breakdown', 'inspection'];
 
     /**
-     * Trucks are available by DEFAULT on weekdays; the availabilities table only records
-     * exceptions. A truck is unavailable for $date when it has a record with one of the
-     * non-working statuses (see UNAVAILABLE_STATUSES). On weekends (Sat/Sun) trucks are
-     * NOT available by default — they must have a positive availability record (e.g.
-     * saturday-loading/unloading, express, available) to show, and no blocking record.
+     * Trucks are NOT available by default. A truck is only available for $date when it
+     * has a positive availability record (e.g. available, express, saturday-loading/
+     * unloading) and no blocking record (see UNAVAILABLE_STATUSES). This applies to both
+     * weekdays and weekends — availability must be created per-month for weekdays first.
      *
      * Returns a closure fn(int $truckId): bool used to filter truck collections.
      */
@@ -231,15 +230,12 @@ class ConsignmentController extends Controller
         $onIds = $records->whereNotIn('status', self::UNAVAILABLE_STATUSES)
             ->pluck('truck_id')->unique();
 
-        $isWeekend = Carbon::parse($date)->dayOfWeekIso >= 6; // 6 = Sat, 7 = Sun
-
-        return function ($truckId) use ($offIds, $onIds, $isWeekend) {
+        return function ($truckId) use ($offIds, $onIds) {
             if ($offIds->contains($truckId)) {
                 return false;
             }
-            // Weekdays: available unless explicitly marked off.
-            // Weekends: require a positive record.
-            return $isWeekend ? $onIds->contains($truckId) : true;
+            // Require a positive availability record — nothing is available by default.
+            return $onIds->contains($truckId);
         };
     }
 

@@ -5,8 +5,8 @@
     $consignors = $cellData['consignors'] ?? collect();
 
     $isAssigned = $consignors->isNotEmpty();
-    // A default-available weekday cell has no backing availability row, so it can't be
-    // dragged to relocate a record (only explicitly-recorded 'available' cells can).
+    // Only explicitly-recorded 'available' cells have a backing availability row, so
+    // only they can be dragged to relocate the record.
     $hasRecord = $cellData['has_record'] ?? false;
     $isWeekend = \Carbon\Carbon::parse($dateOnly)->isWeekend();
     // Flow-off: truck is committed on the OTHER location as it moves MY<->SG across
@@ -28,14 +28,11 @@
         // Truck is away on this side today (part of the MY<->SG flow) -> grey
         $cellStyle = 'background-color: #c3c2c2;';
     } elseif ($status === 'available') {
-        // Explicitly marked available -> white, even on weekends
+        // Explicitly marked available -> white
         $cellStyle = 'background-color: #ffffff;';
-    } elseif ($isWeekend) {
-        // Weekends are off by default
-        $cellStyle = 'background-color: #c3c2c2;';
     } else {
-        // Default: everything is available (white)
-        $cellStyle = 'background-color: #ffffff;';
+        // Not available: no availability record (empty) or weekend -> grey
+        $cellStyle = 'background-color: #c3c2c2;';
     }
 
     $driverOnLeave = $cellData['driver_on_leave'] ?? false;

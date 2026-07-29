@@ -13,6 +13,7 @@ use App\Models\Driver;
 use App\Models\DriverHoliday;
 use App\Models\Subcon;
 use App\Models\TemporaryTruck;
+use App\Support\AvailabilityMonth;
 use Illuminate\Support\Facades\DB;
 class CalendarController extends Controller
 {
@@ -397,10 +398,10 @@ class CalendarController extends Controller
 
             foreach ($dates as $date) {
                 $formattedDate = $date['date']->format('Y-m-d');
-                // Trucks are available by default on weekdays; the availabilities table only
-                // records off-days/exceptions. Weekends are off by default.
-                $isWeekend = $date['date']->isWeekend();
-                $defaultStatus = $isWeekend ? 'empty' : 'available';
+                // Trucks are NOT available by default. A truck only shows on a day when it
+                // has an explicit availability record (created per-month for weekdays) or a
+                // consignment. Everything else is empty (not available).
+                $defaultStatus = 'empty';
                 $key = $truck->number . '-' . $formattedDate;
                 $availKey = $truck->id . '-' . $formattedDate;
 
@@ -791,6 +792,7 @@ class CalendarController extends Controller
             'status' => 'required|string',
             'location' => 'required|string',
             'date' => 'nullable|date',
+            'month' => 'nullable|string',
             'date_range' => 'nullable|string',
             'temp_chassis_type' => 'nullable|array',
             'temp_chassis_type.*' => 'nullable|string|max:50',
@@ -851,7 +853,6 @@ class CalendarController extends Controller
 
         $status = strtolower($validated['status']);
         $firstLocation = strtoupper($validated['location']);
-        $secondLocation = $firstLocation === 'MY' ? 'SG' : 'MY';
 
         // Fetch all trucks and subcons
         $truck_select = Truck::select('id', 'number', 'team')
@@ -914,22 +915,18 @@ class CalendarController extends Controller
             }
 
             if ($status === 'available') {
-                if (empty($validated['date_range'])) {
-                    \Log::warning("Date range missing for available status for $truckNumber");
+                if (empty($validated['month'])) {
+                    \Log::warning("Month missing for available status for $truckNumber");
                     continue;
                 }
 
-                $rangeParts = explode(' to ', $validated['date_range']);
-                $start = Carbon::parse(trim($rangeParts[0]));
-                $end = Carbon::parse(trim($rangeParts[1]));
-                $current = $start->copy();
-                $toggle = true;
+                // Availability is created per-month for weekdays only, alternating MY/SG
+                // from the chosen first location. See App\Support\AvailabilityMonth.
+                $schedule = AvailabilityMonth::weekdaySchedule($validated['month'], $firstLocation);
 
-                while ($current->lte($end)) {
-                    $location = $toggle ? $firstLocation : $secondLocation;
-
+                foreach ($schedule as $slot) {
                     // Check if record exists
-                    $availabilityQuery = Availability::query()->where('date', $current->format('Y-m-d'));
+                    $availabilityQuery = Availability::query()->where('date', $slot['date']);
 
                     if ($truckId) {
                         $availabilityQuery->where('truck_id', $truckId);
@@ -940,19 +937,16 @@ class CalendarController extends Controller
                     $availability = $availabilityQuery->first();
 
                     if ($availability) {
-                        $availability->update(['status' => $status, 'location' => $location]);
+                        $availability->update(['status' => $status, 'location' => $slot['location']]);
                     } else {
                         Availability::create([
                             'truck_id' => $truckId,
                             'subcon_id' => $subconId,
-                            'date' => $current->format('Y-m-d'),
-                            'location' => $location,
+                            'date' => $slot['date'],
+                            'location' => $slot['location'],
                             'status' => $status,
                         ]);
                     }
-
-                    $toggle = !$toggle;
-                    $current->addDay();
                 }
             } else {
                 // For single-date statuses (like off-day)

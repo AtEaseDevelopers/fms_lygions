@@ -787,6 +787,12 @@
                                     </h6>
                                     <small class="text-muted d-block mb-3">Reserve placeholders by type/size; assign a real subcon later from the calendar.</small>
 
+                                    <div id="tempSubconDateWrap" class="mb-3" style="display:none;">
+                                        <label class="form-label fw-bold">Temp Subcon Date Range:</label>
+                                        <input type="text" name="date_range" id="temp_date_range" class="form-control">
+                                        <small class="text-muted">Only used for the temporary subcons below.</small>
+                                    </div>
+
                                     <div id="tempSubconRows">
                                 <div class="temp-subcon-row border rounded p-2 mb-2 position-relative" style="background:#fff; padding-right:32px !important;">
                                     <button type="button" class="btn btn-sm btn-link text-danger removeTempRow p-0"
@@ -856,6 +862,15 @@
     .availability-cell {
         cursor: default;
         transition: background-color 0.2s ease;
+        overflow: hidden;
+    }
+
+    /* Keep cell content (badges) inside the fixed-width cell instead of
+       spilling over into neighbouring columns. */
+    .availability-cell .badge {
+        max-width: 100%;
+        white-space: normal;
+        word-break: break-word;
     }
 
     .availability-cell[data-status="off-day"],
@@ -1606,25 +1621,38 @@
 
 
         $(document).ready(function() {
+            // Temp subcons keep their own date range (unchanged). Initialise once.
+            $('#temp_date_range').daterangepicker({
+                autoUpdateInput: false,
+                locale: {
+                    format: 'YYYY-MM-DD',
+                    separator: ' to ',
+                    cancelLabel: 'Clear'
+                }
+            });
+            $('#temp_date_range').on('apply.daterangepicker', function(ev, picker) {
+                $(this).val(picker.startDate.format('YYYY-MM-DD') + ' to ' + picker.endDate.format('YYYY-MM-DD'));
+            });
+            $('#temp_date_range').on('cancel.daterangepicker', function() {
+                $(this).val('');
+            });
+
             $('#status').on('change', function() {
                 const label = $('#location-label');
                 const dateContainer = $('#date-container');
 
                 if ($(this).val() === 'available') {
-                    // Change label text
+                    // Availability is created per-month for weekdays only, alternating MY/SG.
                     label.text('First Location:');
 
                     dateContainer.html(`
-                <label class="form-label fw-bold">Date Range:</label>
-                <input type="text" name="date_range" id="date_range" class="form-control" required>
+                <label class="form-label fw-bold">Availability Month:</label>
+                <input type="month" name="month" id="avail_month" class="form-control" required>
+                <small class="text-muted">All weekdays in the month are marked available, alternating MY/SG from the first location.</small>
             `);
 
-                    $('#date_range').daterangepicker({
-                        locale: {
-                            format: 'YYYY-MM-DD',
-                            separator: ' to '
-                        }
-                    });
+                    // Temp subcons need their own date range only when creating availability.
+                    $('#tempSubconDateWrap').show();
                 } else {
                     // Revert back to single date picker
                     label.text('Location:');
@@ -1632,6 +1660,7 @@
                 <label class="form-label fw-bold">Date:</label>
                 <input type="date" name="date" class="form-control" required>
             `);
+                    $('#tempSubconDateWrap').hide();
                 }
             });
         });
@@ -1671,15 +1700,6 @@
             window.location.href = url.toString();
         }
     });
-    $('#status').on('change', function() {
-        if ($(this).val() === 'available') {
-            $('#first-location').show();
-        } else {
-            $('#first-location').hide().find('select').val('');
-        }
-    });
-
-
     $(function() {
         $('#filter_daterange').daterangepicker({
             autoUpdateInput: false,
