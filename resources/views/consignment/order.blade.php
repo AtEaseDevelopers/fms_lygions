@@ -2092,6 +2092,9 @@
         tableBody.addEventListener('click', function(e) {
             // Save inline row (both add and edit)
             if (e.target.closest('.save-inline-row')) {
+                const saveBtn = e.target.closest('.save-inline-row');
+                // Guard against double-clicks creating duplicate rows.
+                if (saveBtn.disabled) return;
                 const row = e.target.closest('.inline-edit-row');
                 const formData = new FormData();
                 const editId = row.dataset.editId; // present only for edit rows
@@ -2129,6 +2132,9 @@
                 const submitInline = (action) => {
                     formData.append('express_action', action);
 
+                    // Lock the save button so a second click can't create a duplicate.
+                    saveBtn.disabled = true;
+
                     Swal.fire({
                         title: 'Saving...',
                         allowOutsideClick: false,
@@ -2155,12 +2161,14 @@
                             } else {
                                 Swal.fire('Error', data.message || 'Failed to save order', 'error');
                                 addInlineRowBtn.disabled = false;
+                                saveBtn.disabled = false;
                             }
                         })
                         .catch(err => {
                             console.error(err);
                             Swal.fire('Error', 'Failed to save order', 'error');
                             addInlineRowBtn.disabled = false;
+                            saveBtn.disabled = false;
                         });
                 };
 
@@ -2313,6 +2321,9 @@
 
         // Save All button handler
         saveAllBtn.addEventListener('click', function() {
+            // Guard against double-clicks re-submitting rows that already saved.
+            if (saveAllBtn.disabled) return;
+
             const editRows = tableBody.querySelectorAll('.inline-edit-row');
             if (editRows.length === 0) {
                 Swal.fire('Warning', 'No rows to save', 'warning');
@@ -2330,6 +2341,9 @@
                 firstInvalidRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
+
+            // Lock the button for the whole batch so it can't be fired twice.
+            saveAllBtn.disabled = true;
 
             Swal.fire({
                 title: 'Saving all rows...',
@@ -2364,13 +2378,18 @@
                     method: "POST",
                     headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
                     body: formData
-                }).then(res => res.json()).then(data => ({ editId, data }));
+                }).then(res => res.json()).then(data => ({ row, data }));
             });
 
             Promise.all(promises)
                 .then(results => {
+                    // Remove every row that saved so a later click can't recreate it.
+                    results.filter(r => r.data.success).forEach(r => r.row.remove());
+
                     const failed = results.filter(r => !r.data.success);
                     if (failed.length > 0) {
+                        // Re-enable so the user can retry only the still-failing rows.
+                        saveAllBtn.disabled = false;
                         Swal.fire('Error', `${failed.length} row(s) failed to save`, 'error');
                     } else {
                         Swal.fire({
@@ -2383,6 +2402,7 @@
                 })
                 .catch(err => {
                     console.error(err);
+                    saveAllBtn.disabled = false;
                     Swal.fire('Error', 'Failed to save rows', 'error');
                 });
         });

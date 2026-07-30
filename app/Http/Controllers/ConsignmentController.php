@@ -207,6 +207,21 @@ class ConsignmentController extends Controller
     }
 
     /**
+     * Find an existing consignment that is effectively the same order as the
+     * incoming request — same customer (consignor/consignee), same route
+     * (pick/drop point) and same load date. Used to reject duplicate submissions.
+     */
+    private function findDuplicateConsignment(Request $request): ?Consignment
+    {
+        return Consignment::where('load_date', $request->load_date)
+            ->where('consignor', $request->consignor)
+            ->where('consignee', $request->consignee)
+            ->where('pick_point', $request->pick_point)
+            ->where('drop_point', $request->drop_point)
+            ->first();
+    }
+
+    /**
      * Availability statuses that mark a truck as NOT operating on a given date.
      * Everything else (express, saturday-loading/unloading, available, occupied, or
      * no record at all) leaves the truck available.
@@ -398,6 +413,15 @@ class ConsignmentController extends Controller
             'self_delivery' => 'nullable|boolean',
         ]);
 
+        // Block accidental duplicate submissions (double-click / browser resubmit).
+        if ($this->findDuplicateConsignment($request)) {
+            return redirect()->back()->with('swal', [
+                'icon' => 'warning',
+                'title' => 'Duplicate order',
+                'text' => 'A consignment with the same customer, route and load date already exists.',
+            ]);
+        }
+
         // current date in GMT+8
         $date = Carbon::now('Asia/Kuala_Lumpur');
         $dateCode = $date->format('dm'); // e.g. 0510 for 5 Oct
@@ -503,6 +527,17 @@ class ConsignmentController extends Controller
             'pick_address' => 'nullable|string',
             'drop_address' => 'nullable|string',
         ]);
+
+        // Block accidental duplicate submissions (double-click, or Save-All
+        // re-posting a row that already saved). Same customer + route + load
+        // date is treated as the same order.
+        if ($this->findDuplicateConsignment($request)) {
+            return response()->json([
+                'success' => false,
+                'duplicate' => true,
+                'message' => 'A consignment with the same customer, route and load date already exists.',
+            ]);
+        }
 
         $date = Carbon::now('Asia/Kuala_Lumpur');
         $dateCode = $date->format('dm');
