@@ -14,6 +14,7 @@ use App\Models\DriverHoliday;
 use App\Models\Subcon;
 use App\Models\TemporaryTruck;
 use App\Support\AvailabilityMonth;
+use App\Support\DateRange;
 use Illuminate\Support\Facades\DB;
 class CalendarController extends Controller
 {
@@ -792,6 +793,7 @@ class CalendarController extends Controller
             'status' => 'required|string',
             'location' => 'required|string',
             'date' => 'nullable|date',
+            'arr_date_range' => 'nullable|string',
             'month' => 'nullable|string',
             'date_range' => 'nullable|string',
             'temp_chassis_type' => 'nullable|array',
@@ -854,6 +856,14 @@ class CalendarController extends Controller
         $status = strtolower($validated['status']);
         $firstLocation = strtoupper($validated['location']);
 
+        // Single-date statuses (off-day, maintenance, driver-leave and the other
+        // special arrangements) now accept a date range so an arrangement can span
+        // several days at once. Falls back to the legacy single `date` field.
+        $arrangementDates = DateRange::expand($validated['arr_date_range'] ?? null);
+        if (empty($arrangementDates) && !empty($validated['date'])) {
+            $arrangementDates = [$validated['date']];
+        }
+
         // Fetch all trucks and subcons
         $truck_select = Truck::select('id', 'number', 'team')
             ->where('is_outsider', 0)
@@ -893,7 +903,13 @@ class CalendarController extends Controller
             // Driver leave ties into the existing Driver Holiday system rather than
             // creating an availability row, so it stays consistent with the on-leave logic.
             if ($status === 'driver-leave') {
-                $request->validate(['date' => 'required|date']);
+                if (empty($arrangementDates)) {
+                    return back()->with('swal', [
+                        'icon' => 'error',
+                        'title' => 'Missing date',
+                        'text' => 'Pick a date (or date range) for the driver leave.',
+                    ]);
+                }
                 if (!$truckId) {
                     \Log::warning("Driver leave needs a truck (not subcon): $truckNumber");
                     continue;
@@ -903,11 +919,12 @@ class CalendarController extends Controller
                     \Log::warning("No default driver for truck $truckNumber; driver-leave skipped");
                     continue;
                 }
+                // A range maps to a single holiday spanning the first to last day.
                 DriverHoliday::firstOrCreate(
                     [
                         'driver_id'  => $driver->id,
-                        'start_date' => $validated['date'],
-                        'end_date'   => $validated['date'],
+                        'start_date' => $arrangementDates[0],
+                        'end_date'   => $arrangementDates[count($arrangementDates) - 1],
                     ],
                     ['remarks' => 'Driver leave (calendar)']
                 );
@@ -949,28 +966,38 @@ class CalendarController extends Controller
                     }
                 }
             } else {
-                // For single-date statuses (like off-day)
-                $request->validate(['date' => 'required|date']);
-                $availabilityQuery = Availability::query()->where('date', $validated['date']);
-
-                if ($truckId) {
-                    $availabilityQuery->where('truck_id', $truckId);
-                } elseif ($subconId) {
-                    $availabilityQuery->where('subcon_id', $subconId);
+                // Single-date statuses (off-day, maintenance and the other special
+                // arrangements). Each day in the range gets its own availability row.
+                if (empty($arrangementDates)) {
+                    return back()->with('swal', [
+                        'icon' => 'error',
+                        'title' => 'Missing date',
+                        'text' => 'Pick a date (or date range) for this arrangement.',
+                    ]);
                 }
 
-                $availability = $availabilityQuery->first();
+                foreach ($arrangementDates as $arrDate) {
+                    $availabilityQuery = Availability::query()->where('date', $arrDate);
 
-                if ($availability) {
-                    $availability->update(['status' => $status, 'location' => $firstLocation]);
-                } else {
-                    Availability::create([
-                        'truck_id' => $truckId,
-                        'subcon_id' => $subconId,
-                        'date' => $validated['date'],
-                        'location' => $firstLocation,
-                        'status' => $status,
-                    ]);
+                    if ($truckId) {
+                        $availabilityQuery->where('truck_id', $truckId);
+                    } elseif ($subconId) {
+                        $availabilityQuery->where('subcon_id', $subconId);
+                    }
+
+                    $availability = $availabilityQuery->first();
+
+                    if ($availability) {
+                        $availability->update(['status' => $status, 'location' => $firstLocation]);
+                    } else {
+                        Availability::create([
+                            'truck_id' => $truckId,
+                            'subcon_id' => $subconId,
+                            'date' => $arrDate,
+                            'location' => $firstLocation,
+                            'status' => $status,
+                        ]);
+                    }
                 }
             }
 

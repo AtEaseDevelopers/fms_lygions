@@ -713,7 +713,8 @@
 
                                     <div class="mb-3" id="date-container">
                                         <label class="form-label fw-bold">Date:</label>
-                                        <input type="date" name="date" class="form-control" required>
+                                        <input type="text" name="arr_date_range" id="arr_date_range" class="form-control" placeholder="Pick a day or drag a range" autocomplete="off" required>
+                                        <small class="text-muted">Pick one day, or drag to select a range (e.g. driver on leave for several days).</small>
                                     </div>
 
                                     <div class="mb-0">
@@ -1620,6 +1621,29 @@
         });
 
 
+        // Attach a single-or-range date picker to the arrangement date field.
+        // One day = pick the same start/end; a range covers several days (e.g. leave).
+        function initArrangementRange() {
+            const $inp = $('#arr_date_range');
+            if (!$inp.length) return;
+            $inp.daterangepicker({
+                autoUpdateInput: false,
+                locale: {
+                    format: 'YYYY-MM-DD',
+                    separator: ' to ',
+                    cancelLabel: 'Clear'
+                }
+            });
+            $inp.on('apply.daterangepicker', function(ev, picker) {
+                const start = picker.startDate.format('YYYY-MM-DD');
+                const end = picker.endDate.format('YYYY-MM-DD');
+                $(this).val(start === end ? start : start + ' to ' + end);
+            });
+            $inp.on('cancel.daterangepicker', function() {
+                $(this).val('');
+            });
+        }
+
         $(document).ready(function() {
             // Temp subcons keep their own date range (unchanged). Initialise once.
             $('#temp_date_range').daterangepicker({
@@ -1636,6 +1660,9 @@
             $('#temp_date_range').on('cancel.daterangepicker', function() {
                 $(this).val('');
             });
+
+            // Arrangement date field starts as a single-or-range picker.
+            initArrangementRange();
 
             $('#status').on('change', function() {
                 const label = $('#location-label');
@@ -1654,12 +1681,14 @@
                     // Temp subcons need their own date range only when creating availability.
                     $('#tempSubconDateWrap').show();
                 } else {
-                    // Revert back to single date picker
+                    // Revert back to the single-or-range date picker.
                     label.text('Location:');
                     dateContainer.html(`
                 <label class="form-label fw-bold">Date:</label>
-                <input type="date" name="date" class="form-control" required>
+                <input type="text" name="arr_date_range" id="arr_date_range" class="form-control" placeholder="Pick a day or drag a range" autocomplete="off" required>
+                <small class="text-muted">Pick one day, or drag to select a range (e.g. driver on leave for several days).</small>
             `);
+                    initArrangementRange();
                     $('#tempSubconDateWrap').hide();
                 }
             });

@@ -1386,6 +1386,39 @@
             return invalid;
         }
 
+        // Flag a row that failed to save on the server: red tint + a warning
+        // icon in the NEW/EDIT column whose tooltip shows why it failed.
+        function markRowSaveError(row, message) {
+            row.classList.add('row-save-error');
+            const labelCell = row.querySelectorAll('td')[1]; // NEW / EDIT column
+            if (!labelCell) return;
+            let icon = labelCell.querySelector('.row-error-icon');
+            if (!icon) {
+                icon = document.createElement('i');
+                icon.className = 'bi bi-exclamation-triangle-fill text-danger row-error-icon ms-1';
+                labelCell.appendChild(icon);
+            }
+            icon.title = message || 'Failed to save';
+        }
+
+        // Remove any previous save-error flag from a row.
+        function clearRowSaveError(row) {
+            row.classList.remove('row-save-error');
+            row.querySelectorAll('.row-error-icon').forEach(el => el.remove());
+        }
+
+        // Pull a human-readable reason out of a save response (duplicate
+        // message, first validation error, or a generic fallback).
+        function extractSaveError(data) {
+            if (!data) return 'Server error — please try again.';
+            if (data.message) return data.message;
+            if (data.errors) {
+                const first = Object.values(data.errors)[0];
+                if (Array.isArray(first) && first.length) return first[0];
+            }
+            return 'Failed to save.';
+        }
+
         let editAllMode = false;
         const editAllBtn = document.getElementById('editAllBtn');
         const cancelAllBtn = document.getElementById('cancelAllBtn');
@@ -2086,6 +2119,9 @@
             if (e.target.classList && e.target.classList.contains('field-error') && e.target.value.trim()) {
                 e.target.classList.remove('field-error');
             }
+            // Editing anything in a failed row clears its save-error flag.
+            const failedRow = e.target.closest('.inline-edit-row.row-save-error');
+            if (failedRow) clearRowSaveError(failedRow);
         });
 
         // Event delegation for save/cancel buttons
@@ -2351,60 +2387,88 @@
                 didOpen: () => { Swal.showLoading(); }
             });
 
-            const promises = Array.from(editRows).map(row => {
-                const editId = row.dataset.editId; // present only for existing rows
-                const isEdit = !!editId;
-                const url = isEdit
-                    ? `/consignment-order/${editId}/update-inline`
-                    : "{{ route('consignment-order.store-inline') }}";
-                const formData = new FormData();
+            // Save rows ONE AT A TIME (not Promise.all). Firing them concurrently
+            // let two rows grab the same consignment number before either
+            // committed. Saving in sequence means each row's number is generated
+            // after the previous row is already stored, keeping them unique.
+            (async () => {
+                const results = [];
 
-                row.querySelectorAll('input, select').forEach(input => {
-                    if (input.name) {
-                        if (input.type === 'checkbox') {
-                            if (input.checked) {
+                for (const row of editRows) {
+                    // Clear any error flag from a previous Save All attempt.
+                    clearRowSaveError(row);
+
+                    const editId = row.dataset.editId; // present only for existing rows
+                    const isEdit = !!editId;
+                    const url = isEdit
+                        ? `/consignment-order/${editId}/update-inline`
+                        : "{{ route('consignment-order.store-inline') }}";
+                    const formData = new FormData();
+
+                    row.querySelectorAll('input, select').forEach(input => {
+                        if (input.name) {
+                            if (input.type === 'checkbox') {
+                                if (input.checked) {
+                                    formData.append(input.name, input.value);
+                                }
+                            } else {
                                 formData.append(input.name, input.value);
                             }
-                        } else {
-                            formData.append(input.name, input.value);
                         }
+                    });
+
+                    // New rows go through the store endpoint, which expects an express action
+                    if (!isEdit) formData.append('express_action', 'swap');
+
+                    try {
+                        const res = await fetch(url, {
+                            method: "POST",
+                            headers: {
+                                "X-CSRF-TOKEN": "{{ csrf_token() }}",
+                                // Ask Laravel to return validation errors as JSON (422)
+                                // instead of a redirect, so we can show the reason.
+                                "Accept": "application/json",
+                                "X-Requested-With": "XMLHttpRequest"
+                            },
+                            body: formData
+                        });
+                        let data = {};
+                        try { data = await res.json(); } catch (e) { data = {}; }
+                        // A non-2xx (e.g. 422 validation) means the row did not save.
+                        const success = res.ok && data.success !== false;
+                        results.push({ row, data, success });
+                    } catch (err) {
+                        console.error(err);
+                        results.push({ row, data: {}, success: false });
                     }
-                });
+                }
 
-                // New rows go through the store endpoint, which expects an express action
-                if (!isEdit) formData.append('express_action', 'swap');
+                // Remove every row that saved so a later click can't recreate it.
+                results.filter(r => r.success).forEach(r => r.row.remove());
 
-                return fetch(url, {
-                    method: "POST",
-                    headers: { "X-CSRF-TOKEN": "{{ csrf_token() }}" },
-                    body: formData
-                }).then(res => res.json()).then(data => ({ row, data }));
-            });
+                const failed = results.filter(r => !r.success);
+                if (failed.length > 0) {
+                    // Flag each failing row inline (red tint + reason tooltip) and
+                    // scroll to the first one so the user sees what to fix.
+                    failed.forEach(r => markRowSaveError(r.row, extractSaveError(r.data)));
+                    failed[0].row.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-            Promise.all(promises)
-                .then(results => {
-                    // Remove every row that saved so a later click can't recreate it.
-                    results.filter(r => r.data.success).forEach(r => r.row.remove());
-
-                    const failed = results.filter(r => !r.data.success);
-                    if (failed.length > 0) {
-                        // Re-enable so the user can retry only the still-failing rows.
-                        saveAllBtn.disabled = false;
-                        Swal.fire('Error', `${failed.length} row(s) failed to save`, 'error');
-                    } else {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'All rows saved!',
-                            timer: 2000,
-                            showConfirmButton: false
-                        }).then(() => { location.reload(); });
-                    }
-                })
-                .catch(err => {
-                    console.error(err);
+                    // Re-enable so the user can retry only the still-failing rows.
                     saveAllBtn.disabled = false;
-                    Swal.fire('Error', 'Failed to save rows', 'error');
-                });
+                    Swal.fire(
+                        'Error',
+                        `${failed.length} row(s) failed to save. The failed rows are highlighted in red — hover the ⚠ icon to see why.`,
+                        'error'
+                    );
+                } else {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'All rows saved!',
+                        timer: 2000,
+                        showConfirmButton: false
+                    }).then(() => { location.reload(); });
+                }
+            })();
         });
 
         // Helper: populate truck dropdown for a single row
@@ -2517,6 +2581,21 @@
     .field-error:focus {
         border: 2px solid #dc3545 !important;
         box-shadow: 0 0 0 0.15rem rgba(220, 53, 69, 0.25) !important;
+    }
+
+    /* Red tint + left bar for an inline row that failed to save on the server */
+    .inline-edit-row.row-save-error > td,
+    .inline-edit-row.row-save-error > td.sticky-col {
+        background-color: #f8d7da !important;
+    }
+
+    .inline-edit-row.row-save-error > td:first-child {
+        box-shadow: inset 4px 0 0 0 #dc3545;
+    }
+
+    .row-error-icon {
+        cursor: help;
+        font-size: 0.9rem;
     }
 
     /* Inline editing row styles */

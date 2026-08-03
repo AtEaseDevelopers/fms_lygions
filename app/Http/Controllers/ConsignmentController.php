@@ -207,18 +207,24 @@ class ConsignmentController extends Controller
     }
 
     /**
-     * Find an existing consignment that is effectively the same order as the
-     * incoming request — same customer (consignor/consignee), same route
-     * (pick/drop point) and same load date. Used to reject duplicate submissions.
+     * Build the next consignment number for the given moment, e.g. "CSN. 0308-0007".
+     *
+     * The index is the highest existing number that shares today's "CSN. dm-"
+     * prefix, plus one — so it is always unique for the prefix and never affected
+     * by unrelated rows created the same day (which previously caused duplicate
+     * consignment_no collisions).
      */
-    private function findDuplicateConsignment(Request $request): ?Consignment
+    public function nextConsignmentNumber(?Carbon $now = null): string
     {
-        return Consignment::where('load_date', $request->load_date)
-            ->where('consignor', $request->consignor)
-            ->where('consignee', $request->consignee)
-            ->where('pick_point', $request->pick_point)
-            ->where('drop_point', $request->drop_point)
-            ->first();
+        $now = $now ?? Carbon::now('Asia/Kuala_Lumpur');
+        $prefix = 'CSN. ' . $now->format('dm') . '-';
+
+        $maxIndex = Consignment::where('consignment_no', 'LIKE', $prefix . '%')
+            ->pluck('consignment_no')
+            ->map(fn ($no) => (int) substr((string) $no, -4))
+            ->max();
+
+        return $prefix . str_pad(((int) $maxIndex) + 1, 4, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -413,30 +419,8 @@ class ConsignmentController extends Controller
             'self_delivery' => 'nullable|boolean',
         ]);
 
-        // Block accidental duplicate submissions (double-click / browser resubmit).
-        if ($this->findDuplicateConsignment($request)) {
-            return redirect()->back()->with('swal', [
-                'icon' => 'warning',
-                'title' => 'Duplicate order',
-                'text' => 'A consignment with the same customer, route and load date already exists.',
-            ]);
-        }
-
-        // current date in GMT+8
-        $date = Carbon::now('Asia/Kuala_Lumpur');
-        $dateCode = $date->format('dm'); // e.g. 0510 for 5 Oct
-
-        // find last consignment for today
-        $lastConsignment = Consignment::whereDate('created_at', $date->toDateString())
-            ->orderBy('id', 'desc')
-            ->first();
-
-        $newIndex = $lastConsignment
-            ? str_pad(((int) substr($lastConsignment->consignment_no, -4)) + 1, 4, '0', STR_PAD_LEFT)
-            : '0001';
-
-        // generate consignment number
-        $consignmentNumber = 'CSN. ' . $dateCode . '-' . $newIndex;
+        // generate consignment number (unique for today's "CSN. dm-" prefix)
+        $consignmentNumber = $this->nextConsignmentNumber(Carbon::now('Asia/Kuala_Lumpur'));
 
         // Encode quantity & unit arrays as JSON (empty array if none)
         $quantityJson = !empty($request->quantity) ? json_encode($request->quantity) : json_encode([]);
@@ -528,29 +512,7 @@ class ConsignmentController extends Controller
             'drop_address' => 'nullable|string',
         ]);
 
-        // Block accidental duplicate submissions (double-click, or Save-All
-        // re-posting a row that already saved). Same customer + route + load
-        // date is treated as the same order.
-        if ($this->findDuplicateConsignment($request)) {
-            return response()->json([
-                'success' => false,
-                'duplicate' => true,
-                'message' => 'A consignment with the same customer, route and load date already exists.',
-            ]);
-        }
-
-        $date = Carbon::now('Asia/Kuala_Lumpur');
-        $dateCode = $date->format('dm');
-
-        $lastConsignment = Consignment::whereDate('created_at', $date->toDateString())
-            ->orderBy('id', 'desc')
-            ->first();
-
-        $newIndex = $lastConsignment
-            ? str_pad(((int) substr($lastConsignment->consignment_no, -4)) + 1, 4, '0', STR_PAD_LEFT)
-            : '0001';
-
-        $consignmentNumber = 'CSN. ' . $dateCode . '-' . $newIndex;
+        $consignmentNumber = $this->nextConsignmentNumber(Carbon::now('Asia/Kuala_Lumpur'));
 
         $quantityJson = !empty($request->quantity) ? json_encode($request->quantity) : json_encode([]);
         $unitJson = !empty($request->unit) ? json_encode($request->unit) : json_encode([]);
