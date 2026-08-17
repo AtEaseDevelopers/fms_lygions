@@ -183,6 +183,14 @@
                             </select>
                         </td>
                     </tr>
+                    <tr>
+                        <th>Remarks</th>
+                        <td>
+                            <textarea name="remarks" class="form-control form-control-sm" rows="2"
+                                maxlength="500" placeholder="Add a note for this truck (e.g. leaves late, half-day)…">{{ $availability?->remarks }}</textarea>
+                            <small class="text-muted">Optional — clear the box to remove the note.</small>
+                        </td>
+                    </tr>
                 @endif
             </tbody>
         </table>
@@ -191,6 +199,7 @@
 
         <input type="hidden" name="truck" value="{{ $truckNumber }}">
         <input type="hidden" name="date" value="{{ $date }}">
+        <input type="hidden" name="location" value="{{ $location }}">
         <div class="text-end mt-2">
             @if ($consignments->count() == 0)
                 <button type="button"

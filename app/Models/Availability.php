@@ -15,6 +15,7 @@ use HasFactory;
         'date',
         'location',
         'status',
+        'remarks',
     ];
 
     public function truck()

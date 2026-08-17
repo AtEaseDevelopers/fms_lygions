@@ -154,7 +154,8 @@
         <div class="d-flex flex-wrap justify-content-center gap-3 mb-3 small">
             @php
                 $legendBase = [
-                    ['label' => 'Available', 'color' => '#ffffff', 'border' => true],
+                    ['label' => 'Available (MY)', 'color' => '#9ec5fe', 'border' => false],
+                    ['label' => 'Available (SG)', 'color' => '#f1aeb5', 'border' => false],
                     ['label' => 'Off / Weekend', 'color' => '#c3c2c2', 'border' => false],
                     ['label' => 'Assigned (MY)', 'color' => '#f7c6c7', 'border' => false],
                     ['label' => 'Assigned (SG)', 'color' => '#d1ecf1', 'border' => false],
@@ -186,6 +187,19 @@
             <table class="table text-left table-bordered " style="table-layout: fixed;">
                 <thead>
                     @if (($layout ?? 'horizontal') === 'vertical')
+                        <tr class="text-center small">
+                            <th class="text-end text-primary">Lorries avail.</th>
+                            @foreach ($dates as $date)
+                                @php
+                                    $truckHeaderKey = \Carbon\Carbon::parse($date['date'])->format('Y-m-d');
+                                    $truckHeaderAvail = (int) ($availableTruckCounts[$truckHeaderKey] ?? 0);
+                                @endphp
+                                <th colspan="2" class="text-primary fw-bold"
+                                    title="{{ $truckHeaderAvail }} lorries available">
+                                    <i class="bi bi-truck"></i> {{ $truckHeaderAvail }}
+                                </th>
+                            @endforeach
+                        </tr>
                         <tr class="text-center small">
                             <th rowspan="2" class="align-middle">Truck Num</th>
                             @foreach ($dates as $date)
@@ -235,6 +249,18 @@
                             @endforeach
                         </tr>
                     @else
+                        <tr class="text-center small">
+                            <th colspan="2" class="text-end text-primary">Lorries avail.</th>
+                            @foreach ($dates as $date)
+                                @php
+                                    $truckHeaderKey = \Carbon\Carbon::parse($date['date'])->format('Y-m-d');
+                                    $truckHeaderAvail = (int) ($availableTruckCounts[$truckHeaderKey] ?? 0);
+                                @endphp
+                                <th class="text-primary fw-bold" title="{{ $truckHeaderAvail }} lorries available">
+                                    <i class="bi bi-truck"></i> {{ $truckHeaderAvail }}
+                                </th>
+                            @endforeach
+                        </tr>
                         <tr class="text-center small">
                             <th colspan="2"></th>
                             @foreach ($dates as $date)
@@ -459,8 +485,8 @@
 
                                                 if ($hasCell) {
                                                     $bg = $loc === 'SG'
-                                                        ? ($count > 0 ? '#d1ecf1' : '#ffffff')
-                                                        : ($count > 0 ? '#f7c6c7' : '#ffffff');
+                                                        ? ($count > 0 ? '#d1ecf1' : '#f1aeb5')
+                                                        : ($count > 0 ? '#f7c6c7' : '#9ec5fe');
                                                 } else {
                                                     $bg = '#c3c2c2';
                                                 }

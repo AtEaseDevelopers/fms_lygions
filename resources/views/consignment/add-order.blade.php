@@ -1,5 +1,4 @@
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<!-- jQuery + Select2 are loaded globally by the layout (after core jQuery) -->
 <!-- Add Modal -->
 <style>
     .form-check-input:checked {
@@ -25,7 +24,6 @@
         height: calc(2.25rem + 2px);
     }
 </style>
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 
 
 @php

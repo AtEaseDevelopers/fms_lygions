@@ -119,8 +119,11 @@ class CalendarController extends Controller
         $summary = $this->calculateUtilization($dates);
         $drivers = Driver::where('resigned', 0)->orderBy('name')->get();
 
-        $prevStart = $start->copy()->subDays($days)->format('Y-m-d');
-        $nextStart = $start->copy()->addDays($days)->format('Y-m-d');
+        // Prev/Next step by one week (7 days), so a 14-day view slides a week at
+        // a time and overlaps the previous window instead of jumping a full 2 weeks.
+        $navStep = 7;
+        $prevStart = $start->copy()->subDays($navStep)->format('Y-m-d');
+        $nextStart = $start->copy()->addDays($navStep)->format('Y-m-d');
 
         $truck_select = Truck::select('id', 'number', 'team')
             ->where('is_outsider', 0)
@@ -156,6 +159,22 @@ class CalendarController extends Controller
                 if (!isset($truckDateMatrix[$dateKey])) continue;
                 $truckDateMatrix[$dateKey]['used_capacity'] += (float) ($day['MY']['used_capacity'] ?? 0);
             }
+        }
+
+        // Number of lorries available per date for the header top row. Owned trucks only
+        // (subcons/temp trucks excluded), counted with the same rule as getAvailableTrucks.
+        $ownedTruckIds = array_flip($truckMap->pluck('id')->all());
+        $availableTruckCounts = [];
+        foreach ($dates as $d) {
+            $availableTruckCounts[$d['date']->format('Y-m-d')] = 0;
+        }
+        foreach ($availabilities->groupBy(fn($a) => (new Carbon($a->date))->format('Y-m-d')) as $dateKey => $recs) {
+            if (!array_key_exists($dateKey, $availableTruckCounts)) continue;
+            $ownedRecs = $recs
+                ->filter(fn($r) => $r->truck_id !== null && isset($ownedTruckIds[$r->truck_id]))
+                ->map(fn($r) => ['truck_id' => $r->truck_id, 'status' => $r->status])
+                ->all();
+            $availableTruckCounts[$dateKey] = self::availableTruckCount($ownedRecs);
         }
 
         // Temp subcon capacity sums (MY only, mirroring the existing truck cards)
@@ -205,6 +224,7 @@ class CalendarController extends Controller
             'tempUtilizationMy' => $tempUtilizationMy,
             'tempDateMatrix' => $tempDateMatrix,
             'truckDateMatrix' => $truckDateMatrix,
+            'availableTruckCounts' => $availableTruckCounts,
             'combinedTotal' => $combinedTotal,
             'combinedUsed' => $combinedUsed,
             'combinedUtilization' => $combinedUtilization,
@@ -467,6 +487,7 @@ class CalendarController extends Controller
                         'driver_on_leave' => $myOnLeave,
                         'original_driver_name' => $originalDriverName,
                         'driver_overridden' => $isOverridden,
+                        'remarks' => $myAvailability->remarks ?? null,
                     ],
                     'SG' => [
                         'status' => $sgAvailability->status ?? ($sgConsignments->isNotEmpty() ? 'occupied' : $defaultStatus),
@@ -479,6 +500,7 @@ class CalendarController extends Controller
                         'driver_on_leave' => $sgOnLeave,
                         'original_driver_name' => $originalDriverName,
                         'driver_overridden' => $isOverridden,
+                        'remarks' => $sgAvailability->remarks ?? null,
                     ],
                 ];
             }
@@ -486,6 +508,7 @@ class CalendarController extends Controller
             // Layer the MY<->SG "flow" greying on top of this truck's cells.
             if (isset($calendarMatrix[$truck->number])) {
                 $this->applyAvailabilityFlow($calendarMatrix[$truck->number], $dates);
+                $this->applyIsolatedDayFlags($calendarMatrix[$truck->number], $dates);
             }
         }
 
@@ -536,6 +559,126 @@ class CalendarController extends Controller
             }
         }
     }
+    /**
+     * Availability statuses that mark a truck as NOT operating that day. Mirrors
+     * ConsignmentController::UNAVAILABLE_STATUSES.
+     */
+    public const BLOCKING_STATUSES = ['off-day', 'maintenance', 'holiday', 'breakdown', 'inspection'];
+
+    /**
+     * A truck side is "available" (usable) on a day only for positive statuses.
+     * Everything else — no record ('empty') or a blocking arrangement — means the
+     * truck cannot work that side.
+     */
+    public static function sideStatusAvailable(?string $status): bool
+    {
+        if ($status === null || $status === 'empty') {
+            return false;
+        }
+        return !in_array($status, self::BLOCKING_STATUSES, true);
+    }
+
+    /**
+     * Count how many distinct lorries are available for a single date, given that
+     * date's availability records. A lorry is available when it has a positive record
+     * (available, express, saturday-loading/unloading) and no blocking record; a
+     * blocking record on either side wins. Each record is ['truck_id' => int, 'status'
+     * => string]. Callers pass owned-truck records only. Mirrors the definition used by
+     * ConsignmentController::getAvailableTrucks.
+     */
+    public static function availableTruckCount(array $records): int
+    {
+        $off = [];
+        $on = [];
+        foreach ($records as $r) {
+            $truckId = $r['truck_id'] ?? null;
+            if ($truckId === null) {
+                continue;
+            }
+            if (in_array($r['status'] ?? null, self::BLOCKING_STATUSES, true)) {
+                $off[$truckId] = true;
+            } else {
+                $on[$truckId] = true;
+            }
+        }
+
+        $count = 0;
+        foreach (array_keys($on) as $truckId) {
+            if (!isset($off[$truckId])) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * Dates that should show the "isolated day" cross icon: a day where the truck is
+     * available on BOTH MY and SG, yet stranded — fully unavailable (neither MY nor SG
+     * usable) on BOTH the previous and next calendar day, e.g. a both-sides-available
+     * 17 Aug flanked by fully-off 16 Aug and 18 Aug. Requiring the middle day to be
+     * available on both sides keeps a run of off/empty days from flagging every inner
+     * day. Edge days (no neighbour in the window) are never flagged.
+     *
+     * @param  array  $orderedDates    ordered 'Y-m-d' strings for the visible window
+     * @param  array  $statusesByDate  ['Y-m-d' => ['MY' => status, 'SG' => status]]
+     * @return array  flagged 'Y-m-d' strings
+     */
+    public static function isolatedDayDates(array $orderedDates, array $statusesByDate): array
+    {
+        $bothAvailable = function ($dateKey) use ($statusesByDate) {
+            if (!isset($statusesByDate[$dateKey])) {
+                return false;
+            }
+            return self::sideStatusAvailable($statusesByDate[$dateKey]['MY'] ?? null)
+                && self::sideStatusAvailable($statusesByDate[$dateKey]['SG'] ?? null);
+        };
+        // Fully off = present in the window but neither side usable.
+        $fullyOff = function ($dateKey) use ($statusesByDate) {
+            if (!isset($statusesByDate[$dateKey])) {
+                return false;
+            }
+            return !self::sideStatusAvailable($statusesByDate[$dateKey]['MY'] ?? null)
+                && !self::sideStatusAvailable($statusesByDate[$dateKey]['SG'] ?? null);
+        };
+
+        $flagged = [];
+        $n = count($orderedDates);
+        for ($i = 1; $i < $n - 1; $i++) {
+            $curr = $orderedDates[$i];
+            if ($bothAvailable($curr) && $fullyOff($orderedDates[$i - 1]) && $fullyOff($orderedDates[$i + 1])) {
+                $flagged[] = $curr;
+            }
+        }
+
+        return $flagged;
+    }
+
+    /**
+     * Mark both the MY and SG cells of each isolated day (see isolatedDayDates) so the
+     * cell view can render a warning cross for the whole day.
+     */
+    private function applyIsolatedDayFlags(array &$truckDates, $dates): void
+    {
+        $ordered = $dates->map(fn($d) => $d['date']->format('Y-m-d'))->values()->all();
+
+        $statusesByDate = [];
+        foreach ($ordered as $dateKey) {
+            if (!isset($truckDates[$dateKey])) {
+                continue;
+            }
+            $statusesByDate[$dateKey] = [
+                'MY' => $truckDates[$dateKey]['MY']['status'] ?? 'empty',
+                'SG' => $truckDates[$dateKey]['SG']['status'] ?? 'empty',
+            ];
+        }
+
+        foreach (self::isolatedDayDates($ordered, $statusesByDate) as $dateKey) {
+            $truckDates[$dateKey]['MY']['isolated'] = true;
+            $truckDates[$dateKey]['SG']['isolated'] = true;
+        }
+    }
+
     public function getCellDetails(Request $request)
     {
         $tempId = $request->query('temp_truck_id');
@@ -1220,18 +1363,23 @@ class CalendarController extends Controller
         $validated = $request->validate([
             'truck' => 'required|string',
             'date' => 'required|date',
+            'location' => 'nullable|in:MY,SG',
             'status' => 'nullable|string',
             'driver' => 'nullable|string',
+            'remarks' => 'nullable|string|max:500',
         ]);
 
         // DEBUG: Log validated data
         \Log::info('Validated Data', $validated);
 
-        // Find the related availability record
+        // Find the related availability record. When the caller names a location
+        // (MY/SG) target that exact record so a remark on one side never touches the
+        // other; otherwise fall back to the first record for the truck+date.
         $truckId = Truck::where('number', $validated['truck'])->value('id');
 
         $availability = Availability::where('truck_id', $truckId)
             ->whereDate('date', $validated['date'])
+            ->when(!empty($validated['location']), fn($q) => $q->where('location', $validated['location']))
             ->first();
 
         // DEBUG: Log what we found
@@ -1242,8 +1390,15 @@ class CalendarController extends Controller
             'new_status' => $validated['status'] ?? 'null',
         ]);
 
-        if ($availability && isset($validated['status'])) {
-            $availability->status = $validated['status'];
+        if ($availability) {
+            if (isset($validated['status'])) {
+                $availability->status = $validated['status'];
+            }
+            // A blank remark clears the note (stored as NULL, not an empty string).
+            if (array_key_exists('remarks', $validated)) {
+                $remark = trim((string) $validated['remarks']);
+                $availability->remarks = $remark === '' ? null : $remark;
+            }
             $saved = $availability->save();
 
             // DEBUG: Log save result

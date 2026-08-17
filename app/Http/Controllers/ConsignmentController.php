@@ -10,39 +10,35 @@ use App\Models\Truck;
 use App\Models\Customer;
 use App\Models\Unit;
 use App\Models\DraftCustomer;
-use App\Models\Subcon;
 use App\Models\Availability;
 use App\Models\Notification;
-use App\Models\TemporaryTruck;
 use App\Traits\HandlesExpressModeSwap;
 class ConsignmentController extends Controller
 {
     use HandlesExpressModeSwap;
 
     /**
-     * Display a listing of the resource.
+     * Build the consignment query with the Truck Planning listing filters applied
+     * (date range, status, truck type/number, search) plus sorting. Shared by the
+     * listing (index) and the Excel/CSV export so both stay in sync.
      */
-    public function index(Request $request)
+    private function filteredConsignmentQuery(Request $request)
     {
         $query = Consignment::query();
 
-        $perPage = $request->input('per_page', 10);
-
         $sortBy = $request->get('sort_by', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
+        $monthStart = now()->startOfMonth()->format('Y-m-d');
 
         // Date range filter
-        $today = now()->format('Y-m-d');
-        $truckDate = $request->input('truck_date', $today);
         if ($request->filled('filter_daterange')) {
             $dates = explode(' to ', $request->filter_daterange);
             if (count($dates) === 2) {
-                $startDate = trim($dates[0]);
-                $endDate = trim($dates[1]);
-                $query->whereBetween('load_date', [$startDate, $endDate]);
+                $query->whereBetween('load_date', [trim($dates[0]), trim($dates[1])]);
             }
         } else {
-            $query->where('load_date', '>=', $today);
+            // Default: current month onward. Earlier months live in the archive.
+            $query->where('load_date', '>=', $monthStart);
         }
 
         // Status filter
@@ -77,7 +73,83 @@ class ConsignmentController extends Controller
             });
         }
 
-        $query->orderBy($sortBy, $sortOrder);
+        return $query->orderBy($sortBy, $sortOrder);
+    }
+
+    /**
+     * Export the currently-filtered Truck Planning records as a CSV (opens in Excel).
+     * Uses the exact same filters as the listing, but exports every matching row
+     * (not just the current page).
+     */
+    public function export(Request $request)
+    {
+        $consignments = $this->filteredConsignmentQuery($request)->get();
+
+        $dash = fn ($v) => ($v === null || $v === '' || $v === []) ? '-' : $v;
+        $flatten = function ($v) {
+            $decoded = json_decode((string) $v, true);
+            return is_array($decoded) ? implode(', ', $decoded) : (string) $v;
+        };
+
+        $headers = [
+            'Pick Up Date', 'Consignment No', 'Consignor', 'Pick Point', 'Pick Address',
+            'Consignee', 'Drop Point', 'Drop Address',
+            'Pick Truck Size', 'Drop Truck Size', 'Pick Truck Type', 'Drop Truck Type',
+            'Pick Up Time', 'Qty', 'Unit', 'Pre-Pick',
+            'Truck Number', 'Remarks', 'Billing Remarks', 'Status',
+        ];
+
+        $filename = 'truck-planning-' . now()->format('Y-m-d') . '.csv';
+
+        return response()->streamDownload(function () use ($consignments, $headers, $dash, $flatten) {
+            $out = fopen('php://output', 'w');
+            // BOM so Excel reads UTF-8 correctly.
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, $headers);
+
+            foreach ($consignments as $c) {
+                fputcsv($out, [
+                    $dash($c->load_date),
+                    $dash($c->consignment_no),
+                    $dash($c->consignor),
+                    $dash($c->pick_point),
+                    $dash($c->pick_address),
+                    $dash($c->consignee),
+                    $dash($c->drop_point),
+                    $dash($c->drop_address),
+                    $dash($c->pick_truck_size),
+                    $dash($c->drop_truck_size),
+                    $dash($c->pick_truck_type),
+                    $dash($c->drop_truck_type),
+                    $dash($c->pick_time),
+                    $dash($flatten($c->quantity)),
+                    $dash($flatten($c->unit)),
+                    $c->pre_pick ? 'Yes' : 'No',
+                    $dash($c->truck_number),
+                    $dash($c->remarks),
+                    $dash($c->billing_remark),
+                    $dash($c->status),
+                ]);
+            }
+
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
+        ]);
+    }
+
+    /**
+     * Display a listing of the resource.
+     */
+    public function index(Request $request)
+    {
+        $perPage = $request->input('per_page', 10);
+
+        // Date range filter default anchor (also drives the truck-capacity panel).
+        $today = now()->format('Y-m-d');
+        $truckDate = $request->input('truck_date', $today);
+
+        $query = $this->filteredConsignmentQuery($request);
 
         $consignments = $query->paginate($perPage);
 
@@ -268,20 +340,11 @@ class ConsignmentController extends Controller
 
         $isAvailable = $this->truckAvailabilityChecker($date);
 
-        // Subcons that have been explicitly marked off for the date (they are not
-        // default-available the way owned trucks are, so keep the positive-record rule).
-        $availableSubconIds = Availability::where('date', $date)
-            ->whereNotIn('status', self::UNAVAILABLE_STATUSES)
-            ->whereNotNull('subcon_id')
-            ->pluck('subcon_id')
-            ->unique();
-
-        $available = $trucks->filter(fn($t) => $isAvailable($t->id) && $t->remaining > 0);
-
-        $subcons = Subcon::select('id', 'truck_no', 'chassis_type', 'size')->get()
-            ->filter(fn($s) => $availableSubconIds->contains($s->id));
-
-        $tempTrucks = TemporaryTruck::where('date', $date)->with('subcon')->get();
+        // The inline lorry select mirrors the truck-availability for the date: owned
+        // company trucks only (no subcons, no temporary trucks). A full truck (no
+        // remaining floor space) stays in the list so a lorry can still be assigned
+        // extra capacity — overloading is allowed, so we do not filter on remaining.
+        $available = $trucks->filter(fn($t) => $isAvailable($t->id));
 
         return response()->json([
             'trucks' => $available->map(fn($t) => [
@@ -291,19 +354,10 @@ class ConsignmentController extends Controller
                 'remaining' => $t->remaining,
                 'floor_space' => $t->floor_space,
             ])->values(),
-            'subcons' => $subcons->map(fn($s) => [
-                'truck_no' => $s->truck_no,
-                'chassis_type' => $s->chassis_type,
-                'size' => $s->size,
-            ])->values(),
-            'temp_trucks' => $tempTrucks->map(fn($t) => [
-                'truck_no' => $t->label,
-                'chassis_type' => $t->chassis_type,
-                'size' => $t->size,
-                'location' => $t->location,
-                'subcon_id' => $t->subcon_id,
-                'subcon_truck_no' => optional($t->subcon)->truck_no,
-            ])->values(),
+            // Kept for a stable API shape the frontend already consumes; both are
+            // intentionally empty now that only owned trucks are offered.
+            'subcons' => [],
+            'temp_trucks' => [],
         ]);
     }
 
@@ -311,9 +365,9 @@ class ConsignmentController extends Controller
     {
         $query = Consignment::query();
 
-        // Filter: load_date before today
-        $today = now()->format('Y-m-d');
-        $query->where('load_date', '<', $today);
+        // Filter: load_date before the start of the current month (previous months only)
+        $monthStart = now()->startOfMonth()->format('Y-m-d');
+        $query->where('load_date', '<', $monthStart);
 
         // Optional: filtering by date range or other filters from request
         if ($request->filled('filter_daterange')) {

@@ -31,6 +31,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('subcon', SubconController::class);
     Route::resource('truck', TruckController::class);
     Route::resource('activity-log', ActivityLogController::class);
+    Route::get('/consignment-order/export', [ConsignmentController::class, 'export'])->name('consignment-order.export');
     Route::resource('consignment-order', ConsignmentController::class);
     Route::post('/consignment-order/store-inline', [ConsignmentController::class, 'storeInline'])
     ->name('consignment-order.store-inline');

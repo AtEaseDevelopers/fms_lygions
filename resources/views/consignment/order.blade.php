@@ -51,6 +51,32 @@
             });
         </script>
     @endif
+    <style>
+        /* Searchable inline dropdowns (Select2) sized to match the small table inputs */
+        .inline-edit-row .select2-container {
+            width: 100% !important;
+            min-width: 110px;
+        }
+        .inline-edit-row .select2-container--default .select2-selection--single {
+            height: calc(1.5em + 0.5rem + 2px);
+            padding: 0.2rem 0.4rem;
+            font-size: 0.75rem;
+            border: 1px solid #ced4da;
+            border-radius: 0.2rem;
+        }
+        .inline-edit-row .select2-container--default .select2-selection--single .select2-selection__rendered {
+            line-height: 1.5;
+            padding-left: 0;
+            color: #000;
+        }
+        .inline-edit-row .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 100%;
+        }
+        /* Dropdown menu is attached to <body>; keep it readable and above modals */
+        .select2-container--open { z-index: 2000; }
+        .select2-dropdown { font-size: 0.8rem; }
+        .select2-search__field { font-size: 0.8rem; }
+    </style>
     <div class="row">
         <!-- Main Table Section -->
         <div class="col-md-12" id="tableSection">
@@ -167,6 +193,14 @@
                                     <i class="bi bi-layout-sidebar-reverse me-1" style="font-size: 20px;"></i>
                                     Truck Details
                                 </button>
+                                <a href="{{ route('consignment-order.export', request()->query()) }}">
+                                    <button type="button" class="btn btn-success"
+                                        style="border-radius: 0.2rem; display: inline-flex; align-items: center;"
+                                        title="Export filtered records to Excel">
+                                        <i class="bi bi-file-excel-fill me-1" style="font-size: 20px;"></i>
+                                        Export Excel
+                                    </button>
+                                </a>
                                 <a href="{{ route('archived-consignment-order.index') }}">
                                     <button type="button" class="btn btn-outline-warning"
                                         style="border-radius: 0.2rem; display: inline-flex; align-items: center;">
@@ -211,9 +245,20 @@
                     </div>
 
                     {{-- <div class="table-responsive"> --}}
+                    <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
+                        <small class="text-muted">Tip: click a column's <i class="bi bi-funnel-fill"></i> to filter, or drag its right edge to resize.</small>
+                        <button type="button" id="clearColFiltersBtn" class="btn btn-sm btn-outline-secondary"
+                            style="border-radius: 0.2rem;" title="Clear all column filters">
+                            <i class="bi bi-funnel me-1"></i> Clear filters
+                        </button>
+                        <button type="button" id="resetColWidthsBtn" class="btn btn-sm btn-outline-secondary"
+                            style="border-radius: 0.2rem;" title="Reset all column widths to their default">
+                            <i class="bi bi-arrows-angle-contract me-1"></i> Reset column widths
+                        </button>
+                    </div>
                     <div id="tableScrollTop" style="overflow-x:auto; overflow-y:hidden;"></div>
                     <div id="tableScrollBottom" style="overflow-x:auto;">
-                        <table class="table table-sm table-striped table-bordered align-middle table-nowrap"
+                        <table id="consignmentTable" class="table table-sm table-striped table-bordered align-middle table-nowrap"
                             style="font-size: 0.75rem; border-collapse: collapse;">
                             <thead class="">
                                 <tr>
@@ -957,6 +1002,13 @@
         const ALL_SUBCONS = @json($subcons);
         const truckCacheByDate = {};
 
+        // Today's date in the user's local timezone as YYYY-MM-DD (for date input min/value).
+        function localTodayStr() {
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        }
+
         function invalidateTruckCache(date) {
             if (date) {
                 delete truckCacheByDate[date];
@@ -1137,6 +1189,95 @@
                 offset += width;
             });
         }, 150);
+
+        // Auto-slide the table horizontally when a cell/input is focused (e.g. via Tab),
+        // so the focused column is never hidden behind the sticky left columns or off-screen.
+        (function setupFocusAutoSlide() {
+            const scrollContainer = document.getElementById('tableScrollBottom');
+            if (!scrollContainer) return;
+
+            // Total width of the fixed (sticky) left columns — they cover the left edge,
+            // so a scrollable cell must land to the right of this to be fully visible.
+            function getStickyWidth() {
+                const stickyCells = scrollContainer.querySelectorAll('thead tr:first-child th.sticky-col');
+                let w = 0;
+                stickyCells.forEach(c => w += c.getBoundingClientRect().width);
+                return w;
+            }
+
+            // Tell the browser's OWN focus/scroll-into-view to keep clear of the sticky columns,
+            // so its native scrolling (which ignores sticky cells) doesn't overshoot to the end.
+            function refreshScrollPadding() {
+                scrollContainer.style.scrollPaddingLeft = getStickyWidth() + 'px';
+            }
+            refreshScrollPadding();
+            window.addEventListener('resize', refreshScrollPadding);
+
+            function ensureCellVisible(el) {
+                if (!el) return;
+                const cell = el.closest('td, th');
+                // Sticky columns are always visible — no need to slide for them.
+                if (!cell || cell.classList.contains('sticky-col')) return;
+
+                const margin = 12; // small breathing room
+                const cRect = scrollContainer.getBoundingClientRect();
+                const cellRect = cell.getBoundingClientRect();
+                const visibleLeft = cRect.left + getStickyWidth(); // right edge of the fixed columns
+                const visibleRight = cRect.right;
+
+                let delta = 0;
+                if (cellRect.left < visibleLeft + margin) {
+                    // Hidden behind the fixed columns / off the left — reveal just past the fixed edge.
+                    delta = cellRect.left - (visibleLeft + margin);
+                } else if (cellRect.right > visibleRight - margin) {
+                    // Off the right edge — reveal just inside the right edge.
+                    delta = cellRect.right - (visibleRight - margin);
+                }
+
+                if (delta !== 0) {
+                    // NOTE: assign scrollLeft directly (instant), NOT scrollTo({behavior:'smooth'}).
+                    // The shared layout syncs the top & bottom scrollbars bidirectionally on every
+                    // 'scroll' event; a smooth animation fires those events each frame and the
+                    // write-back cancels the animation mid-way, so it never reaches the target.
+                    const max = scrollContainer.scrollWidth - scrollContainer.clientWidth;
+                    scrollContainer.scrollLeft = Math.max(0, Math.min(max, scrollContainer.scrollLeft + delta));
+                }
+            }
+
+            // All focusable fields inside the table, in DOM (= visual left-to-right) order.
+            function getFocusables() {
+                return Array.prototype.filter.call(
+                    scrollContainer.querySelectorAll('input:not([type=hidden]), select, textarea, button, a[href], [tabindex]:not([tabindex="-1"])'),
+                    function(el) {
+                        return !el.disabled && el.tabIndex !== -1 && el.offsetParent !== null;
+                    }
+                );
+            }
+
+            // Take full control of Tab: move focus WITHOUT the browser's native scroll
+            // (preventScroll), which with sticky columns is unreliable and overshoots,
+            // then slide the table ourselves. No race with the browser.
+            scrollContainer.addEventListener('keydown', function(e) {
+                if (e.key !== 'Tab') return;
+
+                const focusables = getFocusables();
+                const idx = focusables.indexOf(document.activeElement);
+                if (idx === -1) return; // focus isn't on a table field — let the browser handle it
+
+                const nextIdx = e.shiftKey ? idx - 1 : idx + 1;
+                if (nextIdx < 0 || nextIdx >= focusables.length) return; // leaving the table — let the browser handle it
+
+                e.preventDefault();
+                const next = focusables[nextIdx];
+                next.focus({ preventScroll: true });
+                ensureCellVisible(next);
+            });
+
+            // Fallback for focus not driven by Tab (clicks, programmatic focus).
+            scrollContainer.addEventListener('focusin', function(e) {
+                requestAnimationFrame(() => ensureCellVisible(e.target));
+            });
+        })();
 
         const filterForm = $('#filterForm');
         const daterangeInput = $('#filter_daterange');
@@ -1326,9 +1467,16 @@
                 const row = addBtn.closest(".inline-qty-unit-row");
                 const clone = row.cloneNode(true);
                 clone.querySelectorAll("input").forEach(input => input.value = "");
-                clone.querySelectorAll("select").forEach(select => select.selectedIndex = 0);
+                // Drop any Select2 markup copied by cloneNode so we can re-init a clean widget.
+                clone.querySelectorAll(".select2-container").forEach(el => el.remove());
+                clone.querySelectorAll("[data-select2-id]").forEach(el => el.removeAttribute("data-select2-id"));
+                clone.querySelectorAll("select").forEach(select => {
+                    select.classList.remove("select2-hidden-accessible");
+                    select.selectedIndex = 0;
+                });
                 container.appendChild(clone);
                 container.querySelectorAll(".removeInlineQtyRow").forEach(btn => btn.style.display = "");
+                clone.querySelectorAll("select").forEach(select => initSearchableSelect(select));
             }
 
             const removeBtn = e.target.closest(".removeInlineQtyRow");
@@ -1690,7 +1838,37 @@
             if (consignor) fetchAndFillLocations(row, consignor, 'consignor', { overwriteValue: false });
             if (consignee) fetchAndFillLocations(row, consignee, 'consignee', { overwriteValue: false });
 
+            // Make all dropdowns in this edit row searchable.
+            makeRowSelectsSearchable(row);
+
             return row;
+        }
+
+        // Turn every <select> in an inline edit row into a searchable Select2 dropdown.
+        function makeRowSelectsSearchable(row) {
+            if (!window.jQuery || !jQuery.fn.select2) return;
+            jQuery(row).find('select').each(function() {
+                initSearchableSelect(this);
+            });
+        }
+
+        // Initialise (or re-initialise) Select2 on a single <select>. Safe to call
+        // repeatedly and on cloned selects — it strips any stale Select2 markup first.
+        function initSearchableSelect(el) {
+            if (!window.jQuery || !jQuery.fn.select2) return;
+            const $el = jQuery(el);
+            if ($el.hasClass('select2-hidden-accessible')) {
+                try { $el.select2('destroy'); } catch (err) {}
+                $el.removeClass('select2-hidden-accessible')
+                   .removeAttr('data-select2-id aria-hidden tabindex');
+                $el.siblings('.select2-container').remove();
+            }
+            $el.select2({
+                width: '100%',
+                dropdownParent: jQuery('body'),
+                placeholder: '-',
+                allowClear: false
+            });
         }
 
         function populateInlineTruckSelect(row, date, selectedTruck) {
@@ -1770,6 +1948,9 @@
                     opt.selected = true;
                     select.insertBefore(opt, select.options[1] || null);
                 }
+
+                // Make the freshly-rebuilt truck dropdown searchable.
+                initSearchableSelect(select);
             }
 
             if (!date) {
@@ -2005,10 +2186,18 @@
             // Add load_date change listener to populate truck options
             const newLoadDateInput = newRow.querySelector('[name="load_date"]');
             if (newLoadDateInput) {
+                // Default new rows to today and block picking any past date.
+                const today = localTodayStr();
+                newLoadDateInput.min = today;
+                newLoadDateInput.value = today;
+
                 newLoadDateInput.addEventListener('change', function() {
                     const currentTruck = newRow.querySelector('[name="truck_number"]')?.value || '';
                     populateInlineTruckSelect(newRow, this.value, currentTruck);
                 });
+
+                // Load trucks for today's default date immediately.
+                populateInlineTruckSelect(newRow, today, '');
             }
 
             // Re-run filter when pick/drop size or type changes
@@ -2023,6 +2212,9 @@
                         });
                     }
                 });
+
+            // Make all dropdowns in the new row searchable.
+            makeRowSelectsSearchable(newRow);
 
             // Recalculate sticky column positions
             recalculateStickyColumns();
@@ -2865,6 +3057,515 @@
     table.table tbody tr.order-row-1 td {
         background-color: #fff !important;
     }
+
+    /* --- Adjustable column widths ---------------------------------------
+       Only kicks in once the user resizes (or saved widths are restored),
+       so the default page render is unchanged. Fixed layout lets columns
+       shrink below their content, which then clips with an ellipsis. */
+    #consignmentTable.resizable-active {
+        table-layout: fixed;
+    }
+
+    #consignmentTable.resizable-active th,
+    #consignmentTable.resizable-active td {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Drag handle on the right edge of every column header */
+    .col-resize-handle {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        right: 0;
+        width: 6px;
+        cursor: col-resize;
+        user-select: none;
+        z-index: 6;
+    }
+
+    .col-resize-handle:hover,
+    .col-resize-handle.resizing {
+        background-color: #0d6efd;
+    }
+
+    body.col-resizing {
+        cursor: col-resize;
+        user-select: none;
+    }
+
+    /* --- Excel-style per-column value filter ---------------------------- */
+    #consignmentTable thead th.has-col-filter {
+        padding-right: 1.3rem !important;
+    }
+
+    .col-filter-btn {
+        position: absolute;
+        top: 1px;
+        right: 8px;
+        z-index: 5;
+        border: none;
+        background: transparent;
+        padding: 0;
+        line-height: 1;
+        cursor: pointer;
+        color: #b0b6bd;
+        font-size: 0.72rem;
+    }
+
+    .col-filter-btn:hover,
+    .col-filter-btn.filter-active {
+        color: #0d6efd;
+    }
+
+    .col-filter-panel {
+        position: fixed;
+        z-index: 1060;
+        width: 240px;
+        background: #fff;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+        padding: 8px;
+        font-size: 0.8rem;
+    }
+
+    .col-filter-panel .cfp-search {
+        margin-bottom: 6px;
+    }
+
+    .col-filter-panel .cfp-list {
+        max-height: 240px;
+        overflow-y: auto;
+        border-top: 1px solid #eee;
+        border-bottom: 1px solid #eee;
+        padding: 4px 2px;
+    }
+
+    .col-filter-panel .cfp-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        padding: 2px;
+        font-weight: normal;
+        cursor: pointer;
+    }
+
+    .col-filter-panel .cfp-item span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .col-filter-panel .cfp-actions {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+        margin-top: 8px;
+    }
 </style>
+
+{{-- Adjustable column widths: drag the right edge of any column header to resize.
+     Widths are saved in the browser (localStorage) so they persist across visits. --}}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.getElementById("consignmentTable");
+        if (!table || !table.tHead) return;
+
+        const MIN_WIDTH = 40;
+        const storageKey = "consignmentColWidths:v1";
+
+        // Work out the starting column index of each header cell, accounting for
+        // the two header rows and their colspan / rowspan.
+        function buildColumnModel() {
+            const grid = [];
+            const cellStartCol = new Map();
+            const rows = table.tHead.rows;
+            for (let r = 0; r < rows.length; r++) {
+                grid[r] = grid[r] || [];
+                let c = 0;
+                for (const cell of rows[r].cells) {
+                    while (grid[r][c]) c++;
+                    cellStartCol.set(cell, c);
+                    for (let i = 0; i < cell.rowSpan; i++) {
+                        const rr = r + i;
+                        grid[rr] = grid[rr] || [];
+                        for (let j = 0; j < cell.colSpan; j++) grid[rr][c + j] = true;
+                    }
+                    c += cell.colSpan;
+                }
+            }
+            const totalCols = Math.max(0, ...grid.map((row) => row.length));
+            return { cellStartCol, totalCols };
+        }
+
+        const { cellStartCol, totalCols } = buildColumnModel();
+        if (totalCols === 0) return;
+
+        let colgroup = null;
+        let cols = [];
+
+        // Keep the table's total width equal to the sum of the columns so it stays
+        // horizontally scrollable under fixed layout (don't rely on max-content).
+        function syncTableWidth() {
+            if (!cols.length) return;
+            const total = cols.reduce((sum, c) => sum + (parseFloat(c.style.width) || 0), 0);
+            table.style.width = total + "px";
+        }
+
+        // Re-run the app's existing sticky-column offset logic so the fixed left
+        // columns stay lined up after a resize.
+        function recomputeStickyOffsets() {
+            // Use the first *visible* body row — a filtered-out row has zero width.
+            const firstBodyRow = Array.from(table.querySelectorAll("tbody tr")).find(
+                (r) => r.offsetParent !== null
+            );
+            const headerRow = table.querySelector("thead tr");
+            const cells = firstBodyRow
+                ? firstBodyRow.querySelectorAll("td.sticky-col")
+                : headerRow.querySelectorAll("th.sticky-col");
+            let offset = 0;
+            cells.forEach((cell, index) => {
+                if (index > 0) {
+                    document.documentElement.style.setProperty(`--col-${index}`, offset + "px");
+                }
+                offset += Math.round(cell.getBoundingClientRect().width);
+            });
+        }
+
+        // Switch the table into resizable (fixed-layout) mode. Measure the current
+        // natural column widths first and lock them into a colgroup so nothing
+        // jumps when fixed layout takes over.
+        function activate(initialWidths) {
+            if (table.classList.contains("resizable-active")) return;
+
+            const measured = new Array(totalCols).fill(null);
+            for (const cell of table.tHead.querySelectorAll("th")) {
+                if (cell.colSpan === 1) {
+                    const idx = cellStartCol.get(cell);
+                    if (measured[idx] == null) measured[idx] = cell.getBoundingClientRect().width;
+                }
+            }
+
+            colgroup = document.createElement("colgroup");
+            cols = [];
+            for (let i = 0; i < totalCols; i++) {
+                const col = document.createElement("col");
+                const savedW = initialWidths && initialWidths[i] > 0 ? initialWidths[i] : null;
+                const w = savedW || measured[i] || 80;
+                col.style.width = Math.max(MIN_WIDTH, w) + "px";
+                cols.push(col);
+                colgroup.appendChild(col);
+            }
+            table.insertBefore(colgroup, table.firstChild);
+            table.classList.add("resizable-active");
+            syncTableWidth();
+            recomputeStickyOffsets();
+        }
+
+        function saveWidths() {
+            if (!cols.length) return;
+            const widths = cols.map((c) => parseFloat(c.style.width) || 0);
+            localStorage.setItem(storageKey, JSON.stringify(widths));
+        }
+
+        function loadWidths() {
+            try {
+                const raw = localStorage.getItem(storageKey);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) && parsed.length === totalCols ? parsed : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // Restore saved widths on load.
+        const savedWidths = loadWidths();
+        if (savedWidths) activate(savedWidths);
+
+        // Add one drag handle per column, on the lowest single-column header cell.
+        const handleForCol = {};
+        for (const cell of table.tHead.querySelectorAll("th")) {
+            if (cell.colSpan === 1) handleForCol[cellStartCol.get(cell)] = cell; // later rows win
+        }
+
+        let active = null; // { colIndex, startX, startWidth, handle }
+
+        Object.entries(handleForCol).forEach(([colIndex, cell]) => {
+            const idx = parseInt(colIndex, 10);
+            const handle = document.createElement("div");
+            handle.className = "col-resize-handle";
+            handle.title = "Drag to resize column";
+            handle.addEventListener("mousedown", function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                activate(null); // no-op if already active; builds the colgroup on first use
+                active = {
+                    colIndex: idx,
+                    startX: e.clientX,
+                    startWidth: cols[idx].getBoundingClientRect().width,
+                    handle: handle,
+                };
+                handle.classList.add("resizing");
+                document.body.classList.add("col-resizing");
+            });
+            // Don't let a click on the handle trigger the column's sort link.
+            handle.addEventListener("click", (e) => e.stopPropagation());
+            cell.appendChild(handle);
+        });
+
+        document.addEventListener("mousemove", function (e) {
+            if (!active) return;
+            const newWidth = Math.max(MIN_WIDTH, active.startWidth + (e.clientX - active.startX));
+            cols[active.colIndex].style.width = newWidth + "px";
+            syncTableWidth();
+            recomputeStickyOffsets();
+        });
+
+        document.addEventListener("mouseup", function () {
+            if (!active) return;
+            active.handle.classList.remove("resizing");
+            document.body.classList.remove("col-resizing");
+            active = null;
+            saveWidths();
+        });
+
+        const resetBtn = document.getElementById("resetColWidthsBtn");
+        if (resetBtn) {
+            resetBtn.addEventListener("click", function () {
+                localStorage.removeItem(storageKey);
+                if (colgroup) {
+                    colgroup.remove();
+                    colgroup = null;
+                    cols = [];
+                }
+                table.style.width = "";
+                table.classList.remove("resizable-active");
+                // Recompute sticky offsets against the restored natural widths.
+                requestAnimationFrame(recomputeStickyOffsets);
+            });
+        }
+
+        // ================= Excel-style per-column value filters =================
+        // Each listed column gets a funnel button. Clicking it opens a checklist of
+        // the distinct values currently in that column; unticking a value hides the
+        // rows that have it. Filters across columns combine (AND). Client-side only,
+        // so it filters the rows on the current page.
+        // Read the row's clean data-* attribute (the real value) rather than the
+        // cell text, which can be word-wrapped / decorated with icons.
+        const ds = (attr) => (r) => (r.dataset[attr] || "").trim() || "-";
+        const FILTER_COLS = [
+            { i: 2, label: "Pick Up Date", get: ds("loadDate") },
+            { i: 3, label: "Consignor", get: ds("consignor") },
+            { i: 4, label: "Pick Point", get: ds("pickPoint") },
+            { i: 5, label: "Consignee", get: ds("consignee") },
+            { i: 6, label: "Drop Point", get: ds("dropPoint") },
+            { i: 7, label: "Pick Size", get: ds("pickTruckSize") },
+            { i: 8, label: "Drop Size", get: ds("dropTruckSize") },
+            { i: 9, label: "Pick Type", get: ds("pickTruckType") },
+            { i: 10, label: "Drop Type", get: ds("dropTruckType") },
+            { i: 11, label: "Pick Up Time" }, // formatted in the cell — use cell text
+            { i: 14, label: "Pre-Pick", get: ds("prePick") },
+            { i: 15, label: "Truck Number", get: ds("truckNumber") },
+            { i: 16, label: "Remarks", get: ds("remarks") },
+            { i: 17, label: "Billing Remarks", get: ds("billingRemark") },
+            { i: 18, label: "Status", get: ds("status") },
+            { i: 19, label: "Express", get: (r) => (r.dataset.expressMode === "1" ? "Yes" : "-") },
+        ];
+        const CFG_BY_INDEX = {};
+        FILTER_COLS.forEach((c) => (CFG_BY_INDEX[c.i] = c));
+
+        // One header cell per column (same rule as the resize handles).
+        const thForCol = {};
+        for (const cell of table.tHead.querySelectorAll("th")) {
+            if (cell.colSpan === 1) thForCol[cellStartCol.get(cell)] = cell;
+        }
+
+        function orderRows() {
+            return Array.from(table.querySelectorAll("tbody tr.order-row"));
+        }
+
+        function cellValue(row, cfg) {
+            if (cfg.get) return cfg.get(row);
+            const td = row.children[cfg.i];
+            return td ? (td.textContent || "").replace(/\s+/g, " ").trim() : "";
+        }
+
+        const activeFilters = {}; // colIndex -> Set of allowed values
+        let openPanel = null;
+
+        function closePanel() {
+            if (openPanel) {
+                openPanel.remove();
+                openPanel = null;
+            }
+        }
+
+        function applyFilters() {
+            const activeIdx = Object.keys(activeFilters).map(Number);
+            orderRows().forEach((row) => {
+                let show = true;
+                for (const idx of activeIdx) {
+                    if (!activeFilters[idx].has(cellValue(row, CFG_BY_INDEX[idx]))) {
+                        show = false;
+                        break;
+                    }
+                }
+                row.style.display = show ? "" : "none";
+            });
+        }
+
+        function markFunnel(cfg) {
+            const th = thForCol[cfg.i];
+            const btn = th && th.querySelector(".col-filter-btn");
+            if (btn) btn.classList.toggle("filter-active", !!activeFilters[cfg.i]);
+        }
+
+        function buildPanel(cfg, anchorBtn) {
+            closePanel();
+
+            const values = Array.from(new Set(orderRows().map((r) => cellValue(r, cfg)))).sort((a, b) =>
+                a.localeCompare(b, undefined, { numeric: true })
+            );
+            const allowed = activeFilters[cfg.i];
+
+            const panel = document.createElement("div");
+            panel.className = "col-filter-panel";
+            panel.dataset.col = String(cfg.i);
+            panel.innerHTML =
+                '<input type="text" class="cfp-search form-control form-control-sm" placeholder="Search...">' +
+                '<label class="cfp-item" style="font-weight:600;border-bottom:1px solid #eee;padding-bottom:4px;">' +
+                '<input type="checkbox" class="cfp-all"><span>(Select all)</span></label>' +
+                '<div class="cfp-list"></div>' +
+                '<div class="cfp-actions">' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary cfp-clear">Clear filter</button>' +
+                '<button type="button" class="btn btn-sm btn-primary cfp-close">Done</button>' +
+                "</div>";
+
+            const list = panel.querySelector(".cfp-list");
+            values.forEach((v) => {
+                const lbl = document.createElement("label");
+                lbl.className = "cfp-item";
+                const cb = document.createElement("input");
+                cb.type = "checkbox";
+                cb.className = "cfp-val";
+                cb.checked = !allowed || allowed.has(v);
+                cb.value = v;
+                const span = document.createElement("span");
+                span.textContent = v === "" ? "(Blank)" : v;
+                span.title = span.textContent;
+                lbl.appendChild(cb);
+                lbl.appendChild(span);
+                list.appendChild(lbl);
+            });
+
+            function syncAll() {
+                const boxes = Array.from(list.querySelectorAll(".cfp-val"));
+                const checked = boxes.filter((b) => b.checked).length;
+                const all = panel.querySelector(".cfp-all");
+                all.checked = checked === boxes.length;
+                all.indeterminate = checked > 0 && checked < boxes.length;
+            }
+
+            function commit() {
+                const boxes = Array.from(list.querySelectorAll(".cfp-val"));
+                const checked = boxes.filter((b) => b.checked).map((b) => b.value);
+                if (checked.length === boxes.length) {
+                    delete activeFilters[cfg.i];
+                } else {
+                    activeFilters[cfg.i] = new Set(checked);
+                }
+                applyFilters();
+                markFunnel(cfg);
+            }
+
+            panel.querySelector(".cfp-search").addEventListener("input", function () {
+                const q = this.value.toLowerCase();
+                list.querySelectorAll(".cfp-item").forEach((it) => {
+                    it.style.display = it.textContent.toLowerCase().includes(q) ? "" : "none";
+                });
+            });
+            panel.querySelector(".cfp-all").addEventListener("change", function () {
+                list.querySelectorAll(".cfp-item").forEach((it) => {
+                    if (it.style.display !== "none") it.querySelector(".cfp-val").checked = this.checked;
+                });
+                commit();
+            });
+            list.addEventListener("change", function (e) {
+                if (e.target.classList.contains("cfp-val")) {
+                    commit();
+                    syncAll();
+                }
+            });
+            panel.querySelector(".cfp-clear").addEventListener("click", function () {
+                list.querySelectorAll(".cfp-val").forEach((b) => (b.checked = true));
+                commit();
+                syncAll();
+            });
+            panel.querySelector(".cfp-close").addEventListener("click", closePanel);
+
+            document.body.appendChild(panel);
+            syncAll();
+
+            // Position just under the funnel button, kept inside the viewport.
+            const rect = anchorBtn.getBoundingClientRect();
+            let left = Math.max(8, rect.right - panel.offsetWidth);
+            let top = rect.bottom + 4;
+            top = Math.max(8, Math.min(top, window.innerHeight - panel.offsetHeight - 8));
+            panel.style.left = left + "px";
+            panel.style.top = top + "px";
+
+            openPanel = panel;
+            panel.querySelector(".cfp-search").focus();
+        }
+
+        FILTER_COLS.forEach((cfg) => {
+            const th = thForCol[cfg.i];
+            if (!th) return;
+            th.classList.add("has-col-filter");
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "col-filter-btn";
+            btn.title = "Filter " + cfg.label;
+            btn.innerHTML = '<i class="bi bi-funnel-fill"></i>';
+            btn.addEventListener("click", function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (openPanel && openPanel.dataset.col === String(cfg.i)) {
+                    closePanel();
+                } else {
+                    buildPanel(cfg, btn);
+                }
+            });
+            btn.addEventListener("mousedown", (e) => e.stopPropagation());
+            th.appendChild(btn);
+        });
+
+        // Close the panel on outside click, Escape, table scroll, or window resize.
+        document.addEventListener("mousedown", function (e) {
+            if (openPanel && !openPanel.contains(e.target) && !e.target.closest(".col-filter-btn")) {
+                closePanel();
+            }
+        });
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") closePanel();
+        });
+        const scrollBottomEl = document.getElementById("tableScrollBottom");
+        if (scrollBottomEl) scrollBottomEl.addEventListener("scroll", closePanel);
+        window.addEventListener("resize", closePanel);
+
+        const clearAllBtn = document.getElementById("clearColFiltersBtn");
+        if (clearAllBtn) {
+            clearAllBtn.addEventListener("click", function () {
+                Object.keys(activeFilters).forEach((k) => delete activeFilters[k]);
+                FILTER_COLS.forEach(markFunnel);
+                applyFilters();
+                closePanel();
+            });
+        }
+    });
+</script>
 
 @endsection

@@ -28,8 +28,9 @@
         // Truck is away on this side today (part of the MY<->SG flow) -> grey
         $cellStyle = 'background-color: #c3c2c2;';
     } elseif ($status === 'available') {
-        // Explicitly marked available -> white
-        $cellStyle = 'background-color: #ffffff;';
+        // Explicitly marked available -> blue (MY) / red (SG)
+        $availableColor = $location === 'SG' ? '#f1aeb5' : '#9ec5fe';
+        $cellStyle = 'background-color: ' . $availableColor . ';';
     } else {
         // Not available: no availability record (empty) or weekend -> grey
         $cellStyle = 'background-color: #c3c2c2;';
@@ -37,6 +38,10 @@
 
     $driverOnLeave = $cellData['driver_on_leave'] ?? false;
     $driverOverridden = $cellData['driver_overridden'] ?? false;
+    // Isolated day: truck fully unavailable (both MY & SG) the day before AND after.
+    $isolatedDay = $cellData['isolated'] ?? false;
+    // Free-text planner note attached to this availability cell.
+    $remarks = trim((string) ($cellData['remarks'] ?? ''));
 @endphp
 <td class="p-2 availability-cell @if ($profile) arrangement-cell @endif @if ($driverOnLeave) border border-danger border-2 @endif"
     style="{{ $cellStyle }}"
@@ -46,6 +51,12 @@
     data-weekend="{{ $isWeekend ? 'true' : 'false' }}"
     data-flow-off="{{ $flowOff ? 'true' : 'false' }}"
     data-has-consignors="{{ $isAssigned ? 'true' : 'false' }}">
+    @if ($isolatedDay)
+        <div class="text-center" style="line-height: 1;"
+            title="Isolated day — truck is unavailable both the day before and the day after">
+            <i class="bi bi-x-circle-fill text-danger" style="font-size: 1.15rem;"></i>
+        </div>
+    @endif
     @if ($driverOverridden)
         <div class="text-end" style="line-height: 1;">
             <i class="bi bi-person-fill-gear text-secondary" style="font-size: 0.95rem;"></i>
@@ -89,6 +100,14 @@
         <div class="mt-1 text-center">
             <span class="badge mb-1" style="background-color: rgba(0,0,0,0.6); color:#fff;">
                 {{ $profile['label'] }}
+            </span>
+        </div>
+    @endif
+    @if ($remarks !== '')
+        <div class="mt-1 text-center consignor-info"
+            title="{{ '<div class=&quot;fw-bold&quot;>Remark</div>' . e($remarks) }}">
+            <span class="badge bg-dark text-white">
+                <i class="bi bi-chat-left-text-fill me-1"></i>Note
             </span>
         </div>
     @endif
