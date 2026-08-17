@@ -188,15 +188,20 @@
                 <thead>
                     @if (($layout ?? 'horizontal') === 'vertical')
                         <tr class="text-center small">
-                            <th class="text-end text-primary">Lorries avail.</th>
+                            <th class="text-end">Lorries avail.</th>
                             @foreach ($dates as $date)
                                 @php
                                     $truckHeaderKey = \Carbon\Carbon::parse($date['date'])->format('Y-m-d');
-                                    $truckHeaderAvail = (int) ($availableTruckCounts[$truckHeaderKey] ?? 0);
+                                    $truckHeaderAvail = $availableTruckCounts[$truckHeaderKey] ?? ['MY' => 0, 'SG' => 0];
                                 @endphp
-                                <th colspan="2" class="text-primary fw-bold"
-                                    title="{{ $truckHeaderAvail }} lorries available">
-                                    <i class="bi bi-truck"></i> {{ $truckHeaderAvail }}
+                                <th colspan="2"
+                                    title="MY {{ $truckHeaderAvail['MY'] }}, SG {{ $truckHeaderAvail['SG'] }} lorries available">
+                                    <span class="fw-bold me-2" style="color:#0d6efd;">
+                                        <i class="bi bi-truck"></i> MY {{ $truckHeaderAvail['MY'] }}
+                                    </span>
+                                    <span class="fw-bold" style="color:#dc3545;">
+                                        <i class="bi bi-truck"></i> SG {{ $truckHeaderAvail['SG'] }}
+                                    </span>
                                 </th>
                             @endforeach
                         </tr>
@@ -250,14 +255,19 @@
                         </tr>
                     @else
                         <tr class="text-center small">
-                            <th colspan="2" class="text-end text-primary">Lorries avail.</th>
+                            <th colspan="2" class="text-end">Lorries avail.</th>
                             @foreach ($dates as $date)
                                 @php
                                     $truckHeaderKey = \Carbon\Carbon::parse($date['date'])->format('Y-m-d');
-                                    $truckHeaderAvail = (int) ($availableTruckCounts[$truckHeaderKey] ?? 0);
+                                    $truckHeaderAvail = $availableTruckCounts[$truckHeaderKey] ?? ['MY' => 0, 'SG' => 0];
                                 @endphp
-                                <th class="text-primary fw-bold" title="{{ $truckHeaderAvail }} lorries available">
-                                    <i class="bi bi-truck"></i> {{ $truckHeaderAvail }}
+                                <th title="MY {{ $truckHeaderAvail['MY'] }}, SG {{ $truckHeaderAvail['SG'] }} lorries available">
+                                    <div class="fw-bold" style="color:#0d6efd;">
+                                        <i class="bi bi-truck"></i> MY {{ $truckHeaderAvail['MY'] }}
+                                    </div>
+                                    <div class="fw-bold" style="color:#dc3545;">
+                                        <i class="bi bi-truck"></i> SG {{ $truckHeaderAvail['SG'] }}
+                                    </div>
                                 </th>
                             @endforeach
                         </tr>

@@ -161,20 +161,21 @@ class CalendarController extends Controller
             }
         }
 
-        // Number of lorries available per date for the header top row. Owned trucks only
-        // (subcons/temp trucks excluded), counted with the same rule as getAvailableTrucks.
+        // Number of lorries available per date for the header top row, split by MY/SG.
+        // Owned trucks only (subcons/temp trucks excluded), counted with the same rule
+        // as getAvailableTrucks.
         $ownedTruckIds = array_flip($truckMap->pluck('id')->all());
         $availableTruckCounts = [];
         foreach ($dates as $d) {
-            $availableTruckCounts[$d['date']->format('Y-m-d')] = 0;
+            $availableTruckCounts[$d['date']->format('Y-m-d')] = ['MY' => 0, 'SG' => 0];
         }
         foreach ($availabilities->groupBy(fn($a) => (new Carbon($a->date))->format('Y-m-d')) as $dateKey => $recs) {
             if (!array_key_exists($dateKey, $availableTruckCounts)) continue;
             $ownedRecs = $recs
                 ->filter(fn($r) => $r->truck_id !== null && isset($ownedTruckIds[$r->truck_id]))
-                ->map(fn($r) => ['truck_id' => $r->truck_id, 'status' => $r->status])
+                ->map(fn($r) => ['truck_id' => $r->truck_id, 'status' => $r->status, 'location' => $r->location])
                 ->all();
-            $availableTruckCounts[$dateKey] = self::availableTruckCount($ownedRecs);
+            $availableTruckCounts[$dateKey] = self::availableTruckCountsByLocation($ownedRecs);
         }
 
         // Temp subcon capacity sums (MY only, mirroring the existing truck cards)
@@ -579,37 +580,43 @@ class CalendarController extends Controller
     }
 
     /**
-     * Count how many distinct lorries are available for a single date, given that
-     * date's availability records. A lorry is available when it has a positive record
-     * (available, express, saturday-loading/unloading) and no blocking record; a
-     * blocking record on either side wins. Each record is ['truck_id' => int, 'status'
-     * => string]. Callers pass owned-truck records only. Mirrors the definition used by
-     * ConsignmentController::getAvailableTrucks.
+     * Count how many distinct lorries are available for a single date, split by
+     * location (MY / SG), given that date's availability records. A lorry counts on a
+     * side when it has a positive record for that side (available, express, saturday-
+     * loading/unloading) and no blocking record on that same side; a blocking record
+     * wins over a positive one for the same side. Each record is ['truck_id' => int,
+     * 'status' => string, 'location' => 'MY'|'SG']. Callers pass owned-truck records
+     * only. Mirrors the definition used by ConsignmentController::getAvailableTrucks.
+     *
+     * @return array{MY: int, SG: int}
      */
-    public static function availableTruckCount(array $records): int
+    public static function availableTruckCountsByLocation(array $records): array
     {
-        $off = [];
-        $on = [];
+        $off = ['MY' => [], 'SG' => []];
+        $on = ['MY' => [], 'SG' => []];
         foreach ($records as $r) {
             $truckId = $r['truck_id'] ?? null;
-            if ($truckId === null) {
+            $location = $r['location'] ?? null;
+            if ($truckId === null || !isset($off[$location])) {
                 continue;
             }
             if (in_array($r['status'] ?? null, self::BLOCKING_STATUSES, true)) {
-                $off[$truckId] = true;
+                $off[$location][$truckId] = true;
             } else {
-                $on[$truckId] = true;
+                $on[$location][$truckId] = true;
             }
         }
 
-        $count = 0;
-        foreach (array_keys($on) as $truckId) {
-            if (!isset($off[$truckId])) {
-                $count++;
+        $counts = ['MY' => 0, 'SG' => 0];
+        foreach (['MY', 'SG'] as $location) {
+            foreach (array_keys($on[$location]) as $truckId) {
+                if (!isset($off[$location][$truckId])) {
+                    $counts[$location]++;
+                }
             }
         }
 
-        return $count;
+        return $counts;
     }
 
     /**
