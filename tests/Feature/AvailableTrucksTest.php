@@ -123,21 +123,37 @@ class AvailableTrucksTest extends TestCase
         $this->assertNotContains('NONE-1', $numbers);      // no record = not available by default
     }
 
-    public function test_it_excludes_subcons_and_temporary_trucks(): void
+    public function test_it_excludes_availability_subcons_but_includes_temporary_trucks(): void
     {
         $on = Truck::create(['number' => 'ON-1', 'floor_space' => 100, 'is_outsider' => false]);
         Availability::create(['date' => '2026-08-07', 'truck_id' => $on->id, 'status' => 'available']);
 
         $subcon = Subcon::create(['truck_no' => 'SUB-1']);
         Availability::create(['date' => '2026-08-07', 'subcon_id' => $subcon->id, 'status' => 'available']);
-        TemporaryTruck::create(['date' => '2026-08-07', 'label' => 'TEMP-1']);
+        TemporaryTruck::create(['date' => '2026-08-07', 'label' => 'X1']);
 
         $data = $this->available('2026-08-07');
 
         $this->assertCount(1, $data['trucks']);
         $this->assertSame('ON-1', $data['trucks'][0]['number']);
         $this->assertEmpty($data['subcons']);
-        $this->assertEmpty($data['temp_trucks']);
+        // Temporary subcon slots now show up in Truck Planning (labelled by the frontend).
+        $this->assertCount(1, $data['temp_trucks']);
+        $this->assertSame('X1', $data['temp_trucks'][0]['truck_no']);
+        $this->assertNull($data['temp_trucks'][0]['subcon_truck_no']); // still a placeholder
+    }
+
+    public function test_an_assigned_temporary_truck_exposes_the_real_subcon(): void
+    {
+        $subcon = Subcon::create(['truck_no' => 'VMQ 9733']);
+        TemporaryTruck::create(['date' => '2026-08-07', 'label' => 'X1', 'subcon_id' => $subcon->id]);
+
+        $data = $this->available('2026-08-07');
+
+        $this->assertCount(1, $data['temp_trucks']);
+        $this->assertSame('X1', $data['temp_trucks'][0]['truck_no']);
+        $this->assertSame($subcon->id, $data['temp_trucks'][0]['subcon_id']);
+        $this->assertSame('VMQ 9733', $data['temp_trucks'][0]['subcon_truck_no']);
     }
 
     public function test_a_full_truck_is_still_selectable_to_allow_overloading(): void

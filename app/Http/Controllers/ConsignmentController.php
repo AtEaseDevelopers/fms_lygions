@@ -12,6 +12,7 @@ use App\Models\Unit;
 use App\Models\DraftCustomer;
 use App\Models\Availability;
 use App\Models\Notification;
+use App\Models\TemporaryTruck;
 use App\Traits\HandlesExpressModeSwap;
 class ConsignmentController extends Controller
 {
@@ -143,6 +144,46 @@ class ConsignmentController extends Controller
      */
     public function index(Request $request)
     {
+        // --- Truck Planning listing preferences ---------------------------------
+        // Filters and sorting are remembered per user so they survive a refresh,
+        // switching to Truck Capacity and back, or a fresh login. Server-side state
+        // (the query string) is re-applied via a redirect; the client-side column
+        // filters are handed to the view to restore.
+        $filterKeys = ['filter_daterange', 'search', 'status', 'truck_type', 'truck_number', 'per_page', 'sort_by', 'sort_order'];
+        // per_page defaults to 10, so it alone should not re-apply / count as a filter.
+        $redirectKeys = ['filter_daterange', 'search', 'status', 'truck_type', 'truck_number', 'sort_by', 'sort_order'];
+        $user = $request->user();
+
+        if ($user) {
+            $prefs = $user->planning_prefs ?? [];
+
+            if ($request->has('reset')) {
+                $prefs['query'] = [];
+                $user->planning_prefs = $prefs;
+                $user->save();
+                return redirect()->route('consignment-order.index');
+            }
+
+            $hasFilterParams = $request->hasAny($filterKeys);
+            // A "clean" arrival (e.g. from the sidebar) carries no filter/sort/page params.
+            $isNavClean = !$hasFilterParams && !$request->has('page') && !$request->boolean('applied');
+
+            if ($isNavClean) {
+                $savedQuery = array_filter($prefs['query'] ?? [], fn($v) => $v !== null && $v !== '');
+                $meaningful = array_intersect_key($savedQuery, array_flip($redirectKeys));
+                if (!empty($meaningful)) {
+                    return redirect()->route('consignment-order.index', $savedQuery);
+                }
+            } elseif ($hasFilterParams) {
+                // Explicit filter/sort load — remember it for next time.
+                $prefs['query'] = array_filter($request->only($filterKeys), fn($v) => $v !== null && $v !== '');
+                $user->planning_prefs = $prefs;
+                $user->save();
+            }
+        }
+
+        $planningColumnFilters = $user ? ($user->planning_prefs['columnFilters'] ?? []) : [];
+
         $perPage = $request->input('per_page', 10);
 
         // Date range filter default anchor (also drives the truck-capacity panel).
@@ -217,7 +258,55 @@ class ConsignmentController extends Controller
             ->values()
             ->all();
 
-        return view('consignment.order', compact('customers', 'consignments', 'trucks_no', 'trucks_grp', 'affectedIds'));
+        return view('consignment.order', compact('customers', 'consignments', 'trucks_no', 'trucks_grp', 'affectedIds', 'planningColumnFilters'));
+    }
+
+    /**
+     * Persist the current user's Truck Planning per-column filters. The server-side
+     * filters/sort are saved by index() on load; this handles the client-only column
+     * filters so they survive a refresh, navigation, or logout too.
+     */
+    public function savePrefs(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        $data = $request->validate([
+            'columnFilters' => 'nullable|array',
+            'columnFilters.*' => 'nullable|array',
+            'columnFilters.*.*' => 'nullable|string',
+        ]);
+
+        $prefs = $user->planning_prefs ?? [];
+        $prefs['columnFilters'] = $data['columnFilters'] ?? [];
+        $user->planning_prefs = $prefs;
+        $user->save();
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * Lightweight inline update of just the truck assignment for one consignment,
+     * so planners can reassign trucks directly in the listing (no "Edit All", no
+     * page reload — filters and sorting stay put).
+     */
+    public function updateTruckNumber(Request $request, $id)
+    {
+        $data = $request->validate([
+            'truck_number' => 'nullable|string|max:50',
+        ]);
+
+        $consignment = Consignment::findOrFail($id);
+        $consignment->truck_number = $this->normalizeTruckNumber($data['truck_number'] ?? null);
+        $consignment->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Truck assignment updated.',
+            'truck_number' => $consignment->truck_number,
+        ]);
     }
 
     private function getTrucksWithCapacity(string $date)
@@ -346,6 +435,21 @@ class ConsignmentController extends Controller
         // extra capacity — overloading is allowed, so we do not filter on remaining.
         $available = $trucks->filter(fn($t) => $isAvailable($t->id));
 
+        // Temporary subcon trucks reserved for this date are bookable capacity too, so
+        // they appear in the Truck Planning dropdown (labelled "(Temp)" until a real
+        // subcon is assigned, then "(Subcon)"). One entry per label; MY/SG is decided
+        // by the consignment's pick point, same as owned trucks.
+        $tempTrucks = TemporaryTruck::whereDate('date', $date)
+            ->with('subcon')
+            ->get()
+            ->unique('label')
+            ->map(fn($t) => [
+                'truck_no' => $t->label,
+                'subcon_id' => $t->subcon_id,
+                'subcon_truck_no' => $t->subcon?->truck_no,
+            ])
+            ->values();
+
         return response()->json([
             'trucks' => $available->map(fn($t) => [
                 'number' => $t->number,
@@ -354,10 +458,10 @@ class ConsignmentController extends Controller
                 'remaining' => $t->remaining,
                 'floor_space' => $t->floor_space,
             ])->values(),
-            // Kept for a stable API shape the frontend already consumes; both are
-            // intentionally empty now that only owned trucks are offered.
+            // Availability-based subcons stay empty (owned trucks only); temporary
+            // subcon slots are surfaced so planners can book against reserved capacity.
             'subcons' => [],
-            'temp_trucks' => [],
+            'temp_trucks' => $tempTrucks,
         ]);
     }
 

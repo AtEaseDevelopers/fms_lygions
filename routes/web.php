@@ -41,6 +41,10 @@ Route::middleware(['auth'])->group(function () {
     ->name('consignment-order.bulk-status-update');
     Route::post('/consignment-order/{id}/update-inline', [ConsignmentController::class, 'updateInline'])
     ->name('consignment-order.update-inline');
+    Route::patch('/consignment-order/{id}/truck-number', [ConsignmentController::class, 'updateTruckNumber'])
+    ->name('consignment-order.update-truck-number');
+    Route::post('/consignment-order/save-prefs', [ConsignmentController::class, 'savePrefs'])
+    ->name('consignment-order.save-prefs');
     Route::resource('truck-summary', TruckSummaryController::class);
     Route::resource('user', UserController::class);
     Route::resource('role', RoleController::class);
@@ -51,6 +55,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/availability/update', [CalendarController::class, 'updateStatus'])->name('availability.updateStatus');
     Route::post('/calendar/move-cell', [CalendarController::class, 'moveCell'])->name('calendar.move-cell');
     Route::post('/calendar/move-availability', [CalendarController::class, 'moveAvailability'])->name('calendar.move-availability');
+    Route::post('/calendar/add-availability', [CalendarController::class, 'addAvailability'])->name('calendar.add-availability');
     Route::get('/calendar/cell-details', [CalendarController::class, 'getCellDetails'])->name('calendar.cell-details');
     Route::post('/availability/delete', [CalendarController::class, 'deleteAvailability'])->name('availability.delete');
     Route::post('/availability/bulk-delete', [CalendarController::class, 'bulkDeleteAvailability'])->name('availability.bulk-delete');

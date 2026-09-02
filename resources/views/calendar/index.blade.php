@@ -730,7 +730,7 @@
 
                                     <div class="mb-3">
                                         <label class="form-label fw-bold">Status:</label>
-                                        <select class="form-select" name="status" id="status" required>
+                                        <select class="form-select" name="status" id="status">
                                             <option value="" disabled selected>-- Select Status --</option>
                                             <option value="available">Available</option>
                                             <option value="off-day">Off day</option>
@@ -749,17 +749,18 @@
 
                                     <div class="mb-3" id="date-container">
                                         <label class="form-label fw-bold">Date:</label>
-                                        <input type="text" name="arr_date_range" id="arr_date_range" class="form-control" placeholder="Pick a day or drag a range" autocomplete="off" required>
+                                        <input type="text" name="arr_date_range" id="arr_date_range" class="form-control" placeholder="Pick a day or drag a range" autocomplete="off">
                                         <small class="text-muted">Pick one day, or drag to select a range (e.g. driver on leave for several days).</small>
                                     </div>
 
                                     <div class="mb-0">
                                         <label class="form-label fw-bold" id="location-label">Location:</label>
-                                        <select class="form-select" name="location" required>
+                                        <select class="form-select" name="location">
                                             <option value="" disabled selected>-- Select Location --</option>
                                             <option value="MY">MY</option>
                                             <option value="SG">SG</option>
                                         </select>
+                                        <small class="text-muted">Only needed when marking trucks above.</small>
                                     </div>
                                 </div>
                             </div>
@@ -824,10 +825,19 @@
                                     </h6>
                                     <small class="text-muted d-block mb-3">Reserve placeholders by type/size; assign a real subcon later from the calendar.</small>
 
-                                    <div id="tempSubconDateWrap" class="mb-3" style="display:none;">
+                                    <div id="tempSubconDateWrap" class="mb-3">
                                         <label class="form-label fw-bold">Temp Subcon Date Range:</label>
                                         <input type="text" name="date_range" id="temp_date_range" class="form-control">
                                         <small class="text-muted">Only used for the temporary subcons below.</small>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Temp Subcon Location:</label>
+                                        <select class="form-select" name="temp_location" id="temp_location">
+                                            <option value="MY" selected>MY</option>
+                                            <option value="SG">SG</option>
+                                        </select>
+                                        <small class="text-muted">Which side this reserved capacity is on. Fill only this section to add subcons — the Basic fields on the left aren't needed.</small>
                                     </div>
 
                                     <div id="tempSubconRows">
@@ -1430,15 +1440,16 @@
             const targetHasCons = $(this).attr('data-has-consignors') === 'true';
             const crossTruck = targetTruck !== dragState.truck;
             const crossLoc   = targetLoc !== dragState.location;
+            const sameDate   = $(this).attr('data-date') === dragState.date;
             let invalid;
             if (dragState.kind === 'availability') {
-                // Availability can only be relocated onto a free (empty) cell of the
-                // same truck + location.
-                invalid = (this === dragState.el)
-                    || crossTruck
-                    || crossLoc
-                    || targetHasCons
-                    || status !== 'empty';
+                // Horizontal: relocate onto a free (empty) cell of the same truck+side,
+                // different date. Vertical: flip MY<->SG on the same date (the other
+                // side may be empty or already available — that becomes a swap).
+                const horizontalOk = !crossTruck && !crossLoc && !sameDate
+                    && !targetHasCons && status === 'empty';
+                const verticalOk = !crossTruck && crossLoc && sameDate && !targetHasCons;
+                invalid = (this === dragState.el) || !(horizontalOk || verticalOk);
             } else {
                 invalid = (this === dragState.el)
                     || ARRANGEMENT_STATUSES.includes(status)
@@ -1468,7 +1479,9 @@
                 date:     $(this).attr('data-date'),
                 location: $(this).attr('data-location'),
             };
-            if (src.truck === tgt.truck && src.date === tgt.date && src.location === tgt.location) return;
+            const sameDate = src.date === tgt.date;
+            const crossLoc = src.location !== tgt.location;
+            if (src.truck === tgt.truck && sameDate && !crossLoc) return;
             if (src.truck !== tgt.truck) {
                 Swal.fire({
                     icon: 'info',
@@ -1477,11 +1490,16 @@
                 });
                 return;
             }
-            if (src.location !== tgt.location) {
+            // Availability boxes can flip MY<->SG when dropped on the other side of the
+            // SAME date (vertical). Consignments, and any diagonal drop, cannot.
+            const verticalFlip = crossLoc && sameDate && dragState.kind === 'availability';
+            if (crossLoc && !verticalFlip) {
                 Swal.fire({
                     icon: 'info',
                     title: 'Different location',
-                    text: 'Drag-drop can only shift dates. Use the cell modal to change MY/SG.',
+                    text: dragState.kind === 'availability'
+                        ? 'Flip MY/SG on the same date, or shift the date on the same side — not both at once.'
+                        : 'Drag-drop can only shift dates. Use the cell modal to change MY/SG.',
                 });
                 return;
             }
@@ -1512,6 +1530,37 @@
 
             if (dragState.kind === 'availability') {
                 const targetHasCons = $(this).attr('data-has-consignors') === 'true';
+                const payload = {
+                    source_truck: src.truck, source_date: src.date, source_location: src.location,
+                    target_truck: tgt.truck, target_date: tgt.date, target_location: tgt.location,
+                };
+
+                if (verticalFlip) {
+                    // Same date, other side. Swap if that side already has availability.
+                    if (targetHasCons) {
+                        Swal.fire({
+                            icon: 'info',
+                            title: 'Cell not empty',
+                            text: 'The other side already has consignments.',
+                        });
+                        return;
+                    }
+                    const targetAvailable = $(this).attr('data-status') === 'available';
+                    Swal.fire({
+                        title: targetAvailable ? 'Swap MY/SG?' : 'Move to other side?',
+                        html: `<b>${src.truck}</b> ${src.date}<br>${src.location} → ${tgt.location}`,
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonText: targetAvailable ? 'Swap' : 'Move',
+                    }).then(r => {
+                        if (!r.isConfirmed) return;
+                        postMove("{{ route('calendar.move-availability') }}", payload,
+                            targetAvailable ? 'Swapped' : 'Moved');
+                    });
+                    return;
+                }
+
+                // Horizontal date shift — the target cell must be empty.
                 if (targetHasCons || $(this).attr('data-status') !== 'empty') {
                     Swal.fire({
                         icon: 'info',
@@ -1528,10 +1577,7 @@
                     confirmButtonText: 'Move',
                 }).then(r => {
                     if (!r.isConfirmed) return;
-                    postMove("{{ route('calendar.move-availability') }}", {
-                        source_truck: src.truck, source_date: src.date, source_location: src.location,
-                        target_truck: tgt.truck, target_date: tgt.date, target_location: tgt.location,
-                    }, 'Moved');
+                    postMove("{{ route('calendar.move-availability') }}", payload, 'Moved');
                 });
                 return;
             }
@@ -1612,6 +1658,37 @@
                     .then(html => content.innerHTML = html)
                     .catch(err => content.innerHTML =
                         '<div class="p-3 text-danger">Failed to load details.</div>');
+            } else if (status === 'empty' && !isSelectMode()) {
+                // Grey (empty) box -> add a single-day availability for this side.
+                Swal.fire({
+                    title: 'Add availability?',
+                    html: `Make <b>${truck}</b> available on ${date} (<b>${location}</b>)?`,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Add',
+                }).then((result) => {
+                    if (!result.isConfirmed) return;
+                    fetch("{{ route('calendar.add-availability') }}", {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                            'Accept': 'application/json',
+                        },
+                        body: JSON.stringify({ truck, date, location }),
+                    }).then(async res => {
+                        const body = await res.json().catch(() => ({}));
+                        if (!res.ok) throw new Error(body.message || 'Could not add availability.');
+                        await Swal.fire({
+                            icon: 'success',
+                            title: 'Added',
+                            text: body.message,
+                            timer: 1200,
+                            showConfirmButton: false,
+                        });
+                        window.location.reload();
+                    }).catch(err => Swal.fire({ icon: 'error', title: 'Cannot add', text: err.message }));
+                });
             }
         });
 
@@ -1700,6 +1777,46 @@
             // Arrangement date field starts as a single-or-range picker.
             initArrangementRange();
 
+            // Conditional validation: fill EITHER the Basic + Truck side (to mark
+            // trucks) OR just the Temp Subcon section (its own date + location).
+            // The Basic fields are no longer forced when you only add temp subcons.
+            $('#availabilityForm').on('submit', function(e) {
+                const form = this;
+                const trucksChecked = form.querySelectorAll('input[name="truck_numbers[]"]:checked').length > 0;
+                const status = (form.querySelector('#status')?.value || '').trim();
+                const hasTemp = Array.from(form.querySelectorAll('.temp-qty'))
+                    .some(q => parseInt(q.value || '0', 10) > 0);
+
+                const fail = (title, text) => {
+                    e.preventDefault();
+                    Swal.fire({ icon: 'warning', title, text });
+                    return false;
+                };
+
+                if (!trucksChecked && !hasTemp) {
+                    return fail('Nothing to add', 'Tick at least one truck, or add a temporary subcon.');
+                }
+                if (trucksChecked) {
+                    if (!status) return fail('Missing status', 'Pick a status for the selected trucks.');
+                    if (!(form.querySelector('[name="location"]')?.value)) {
+                        return fail('Missing location', 'Pick a location for the selected trucks.');
+                    }
+                    const dateVal = form.querySelector('[name="arr_date_range"]')?.value;
+                    const monthVal = form.querySelector('[name="month"]')?.value;
+                    if (!dateVal && !monthVal) {
+                        return fail('Missing date', 'Pick a date (or availability month) for the selected trucks.');
+                    }
+                }
+                if (hasTemp) {
+                    if (!(form.querySelector('#temp_date_range')?.value)) {
+                        return fail('Missing date range', 'Pick a Temp Subcon Date Range.');
+                    }
+                    if (!(form.querySelector('#temp_location')?.value)) {
+                        return fail('Missing location', 'Pick a Temp Subcon Location.');
+                    }
+                }
+            });
+
             $('#status').on('change', function() {
                 const label = $('#location-label');
                 const dateContainer = $('#date-container');
@@ -1710,23 +1827,21 @@
 
                     dateContainer.html(`
                 <label class="form-label fw-bold">Availability Month:</label>
-                <input type="month" name="month" id="avail_month" class="form-control" required>
+                <input type="month" name="month" id="avail_month" class="form-control">
                 <small class="text-muted">All weekdays in the month are marked available, alternating MY/SG from the first location.</small>
             `);
-
-                    // Temp subcons need their own date range only when creating availability.
-                    $('#tempSubconDateWrap').show();
                 } else {
                     // Revert back to the single-or-range date picker.
                     label.text('Location:');
                     dateContainer.html(`
                 <label class="form-label fw-bold">Date:</label>
-                <input type="text" name="arr_date_range" id="arr_date_range" class="form-control" placeholder="Pick a day or drag a range" autocomplete="off" required>
+                <input type="text" name="arr_date_range" id="arr_date_range" class="form-control" placeholder="Pick a day or drag a range" autocomplete="off">
                 <small class="text-muted">Pick one day, or drag to select a range (e.g. driver on leave for several days).</small>
             `);
                     initArrangementRange();
-                    $('#tempSubconDateWrap').hide();
                 }
+                // The temp subcon date range is always available — adding temp subcons
+                // no longer depends on the Basic status.
             });
         });
 

@@ -47,6 +47,18 @@ class CalendarController extends Controller
         // cache units (space by unit)
         $unitsMap = Unit::all()->pluck('space', 'unit')->mapWithKeys(fn($v, $k) => [trim($k) => (float) $v]);
 
+        // Total cargo required per date, split by side (SG = pick_point Singapore,
+        // MY = everything else). This reflects every booking on the day regardless of
+        // whether trucks are arranged yet, so the header can show the shortfall (e.g.
+        // -1347.0/0.0) on days that have cargo but no trucks assigned.
+        $cargoRequiredByDate = [];
+        foreach ($allConsignments->groupBy(fn($c) => (new Carbon($c->load_date))->format('Y-m-d')) as $dateKey => $cons) {
+            $cargoRequiredByDate[$dateKey] = [
+                'MY' => $this->calcUsedCapacity($cons->where('pick_point', '!=', 'Singapore'), $unitsMap),
+                'SG' => $this->calcUsedCapacity($cons->where('pick_point', 'Singapore'), $unitsMap),
+            ];
+        }
+
         // Build driver-leave lookup: [driver_id][Y-m-d] => true for any DriverHoliday
         // whose [start_date, end_date] overlaps the visible window.
         $driverLeaveMap = [];
@@ -82,13 +94,14 @@ class CalendarController extends Controller
         $filteredMatrix = $this->filterCalendarMatrix($calendarMatrix);
         $trucks = $trucks->filter(fn($truck) => isset($filteredMatrix[$truck->number]));
 
-        // Recalculate date header capacities from the full calendar matrix
-        $dates = $dates->map(function ($entry) use ($calendarMatrix) {
+        // Recalculate date header capacities from the full calendar matrix.
+        // origin  = truck floor space available that day (from available/occupied cells).
+        // balance = total cargo required that day (from all bookings), so the header
+        //           shows the shortfall even on days with cargo but no trucks arranged.
+        $dates = $dates->map(function ($entry) use ($calendarMatrix, $cargoRequiredByDate) {
             $dateKey = $entry['date']->format('Y-m-d');
             $myOrigin = 0;
-            $myBalance = 0;
             $sgOrigin = 0;
-            $sgBalance = 0;
 
             foreach ($calendarMatrix as $truckNumber => $truckDates) {
                 if (!isset($truckDates[$dateKey])) continue;
@@ -102,14 +115,15 @@ class CalendarController extends Controller
                     if (!$flowOff && in_array($status, ['available', 'occupied'])) {
                         if ($loc === 'MY') {
                             $myOrigin += $day[$loc]['total_capacity'] ?? 0;
-                            $myBalance += $day[$loc]['used_capacity'] ?? 0;
                         } else {
                             $sgOrigin += $day[$loc]['total_capacity'] ?? 0;
-                            $sgBalance += $day[$loc]['used_capacity'] ?? 0;
                         }
                     }
                 }
             }
+
+            $myBalance = $cargoRequiredByDate[$dateKey]['MY'] ?? 0;
+            $sgBalance = $cargoRequiredByDate[$dateKey]['SG'] ?? 0;
 
             $entry['MY'] = ['origin' => $myOrigin, 'balance' => $myBalance];
             $entry['SG'] = ['origin' => $sgOrigin, 'balance' => $sgBalance];
@@ -940,12 +954,15 @@ class CalendarController extends Controller
         $validated = $request->validate([
             'truck_numbers' => 'nullable|array',
             'truck_numbers.*' => 'string',
-            'status' => 'required|string',
-            'location' => 'required|string',
+            // status/location are only needed when marking trucks; a temp-subcon-only
+            // submission carries its own date range + location instead.
+            'status' => 'nullable|string',
+            'location' => 'nullable|string',
             'date' => 'nullable|date',
             'arr_date_range' => 'nullable|string',
             'month' => 'nullable|string',
             'date_range' => 'nullable|string',
+            'temp_location' => 'nullable|in:MY,SG',
             'temp_chassis_type' => 'nullable|array',
             'temp_chassis_type.*' => 'nullable|string|max:50',
             'temp_size' => 'nullable|array',
@@ -1003,8 +1020,18 @@ class CalendarController extends Controller
 
         \Log::info('Truck numbers received: ', $truckNumbers);
 
-        $status = strtolower($validated['status']);
-        $firstLocation = strtoupper($validated['location']);
+        $status = strtolower($validated['status'] ?? '');
+        $firstLocation = strtoupper($validated['location'] ?? '');
+
+        // Status + location are required to mark trucks (but not to add temp subcons,
+        // which carry their own date range + location).
+        if (!empty($truckNumbers) && ($status === '' || $firstLocation === '')) {
+            return back()->with('swal', [
+                'icon' => 'error',
+                'title' => 'Missing status or location',
+                'text' => 'Pick a status and location for the selected trucks.',
+            ]);
+        }
 
         // Single-date statuses (off-day, maintenance, driver-leave and the other
         // special arrangements) now accept a date range so an arrangement can span
@@ -1154,14 +1181,18 @@ class CalendarController extends Controller
             \Log::info("Processed $truckNumber", ['truck_id' => $truckId, 'subcon_id' => $subconId, 'status' => $status]);
         }
 
-        // Temporary subcons: only created when status=available with a date range
+        // Temporary subcons: self-contained — created from their own date range and
+        // location, independent of the Basic status/month on the left.
         $tempCreated = 0;
         if (!empty($tempRows)) {
-            if ($status !== 'available') {
+            // The temp section carries its own location; fall back to the Basic
+            // location for older submissions that only had the left field.
+            $tempLocation = strtoupper($validated['temp_location'] ?? '') ?: $firstLocation;
+            if ($tempLocation === '') {
                 return back()->with('swal', [
                     'icon' => 'error',
-                    'title' => 'Temp subcons need status = available',
-                    'text' => 'Set status to Available (with a date range) to add temporary subcons.',
+                    'title' => 'Missing location',
+                    'text' => 'Pick a location for the temporary subcons.',
                 ]);
             }
 
@@ -1210,7 +1241,7 @@ class CalendarController extends Controller
             }
 
             $existing = TemporaryTruck::whereIn('date', $tempDates)
-                ->where('location', $firstLocation)
+                ->where('location', $tempLocation)
                 ->whereIn('label', $allLabels)
                 ->get();
             if ($existing->isNotEmpty()) {
@@ -1218,18 +1249,18 @@ class CalendarController extends Controller
                 return back()->with('swal', [
                     'icon' => 'error',
                     'title' => 'Label already exists',
-                    'text' => 'These (label, date) pairs already exist for ' . $firstLocation . ': ' . implode('; ', $conflicts),
+                    'text' => 'These (label, date) pairs already exist for ' . $tempLocation . ': ' . implode('; ', $conflicts),
                 ]);
             }
 
             try {
-                DB::transaction(function () use ($tempDates, $firstLocation, $tempRows, &$tempCreated) {
+                DB::transaction(function () use ($tempDates, $tempLocation, $tempRows, &$tempCreated) {
                     foreach ($tempDates as $date) {
                         foreach ($tempRows as $row) {
                             foreach ($row['items'] as $item) {
                                 TemporaryTruck::create([
                                     'date' => $date,
-                                    'location' => $firstLocation,
+                                    'location' => $tempLocation,
                                     'chassis_type' => $row['type'],
                                     'size' => $row['size'],
                                     'label' => $item['label'],
@@ -1530,9 +1561,48 @@ class CalendarController extends Controller
         });
     }
 
-    // Drag-drop move: relocate a white "available" cell's Availability record to a
-    // different date on the SAME truck + SAME location. Mirrors moveCell, but acts on
-    // the availability row rather than consignments. The target cell must be empty.
+    // Grid quick-add: clicking a grey (empty) box creates a single-day availability
+    // for that truck + date + side. Lets planners fill a specific date without
+    // re-running the whole month, and re-add a side they previously deleted.
+    public function addAvailability(Request $request)
+    {
+        $v = $request->validate([
+            'truck'    => 'required|string',
+            'date'     => 'required|date',
+            'location' => 'required|in:MY,SG',
+        ]);
+
+        $truck = Truck::where('number', $v['truck'])->where('is_outsider', 0)->first();
+        if (!$truck) {
+            return response()->json(['message' => 'Truck not found.'], 404);
+        }
+
+        $exists = Availability::where('truck_id', $truck->id)
+            ->where('location', $v['location'])
+            ->whereDate('date', $v['date'])
+            ->exists();
+        if ($exists) {
+            return response()->json(['message' => 'This cell already has an availability.'], 422);
+        }
+
+        Availability::create([
+            'truck_id' => $truck->id,
+            'date'     => $v['date'],
+            'location' => $v['location'],
+            'status'   => 'available',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Availability added for {$v['location']} on {$v['date']}.",
+        ]);
+    }
+
+    // Drag-drop move: relocate a white "available" cell's Availability record on the
+    // SAME truck along ONE axis — horizontally to another date (same side), or
+    // vertically to the other side (same date, MY<->SG). A vertical drop onto a side
+    // that already has availability swaps the two sides. Acts on the availability row
+    // rather than consignments.
     public function moveAvailability(Request $request)
     {
         $v = $request->validate([
@@ -1544,9 +1614,10 @@ class CalendarController extends Controller
             'target_location' => 'required|in:MY,SG',
         ]);
 
-        if ($v['source_truck'] === $v['target_truck']
-            && $v['source_date'] === $v['target_date']
-            && $v['source_location'] === $v['target_location']) {
+        $sameDate = $v['source_date'] === $v['target_date'];
+        $sameLoc  = $v['source_location'] === $v['target_location'];
+
+        if ($v['source_truck'] === $v['target_truck'] && $sameDate && $sameLoc) {
             return response()->json(['message' => 'Source and target are the same cell.'], 422);
         }
 
@@ -1557,10 +1628,10 @@ class CalendarController extends Controller
             ], 422);
         }
 
-        // Same-location only — changing MY/SG goes through the availability form.
-        if ($v['source_location'] !== $v['target_location']) {
+        // One axis at a time: shift the date (same side) OR flip the side (same date).
+        if (!$sameDate && !$sameLoc) {
             return response()->json([
-                'message' => 'Drag-drop can only shift dates. Use the form to change MY/SG.',
+                'message' => 'Drag-drop can shift the date or flip MY/SG, but not both at once.',
             ], 422);
         }
 
@@ -1569,7 +1640,7 @@ class CalendarController extends Controller
             return response()->json(['message' => 'Truck not found.'], 404);
         }
 
-        return DB::transaction(function () use ($v, $truck) {
+        return DB::transaction(function () use ($v, $truck, $sameLoc) {
             $source = Availability::where('truck_id', $truck->id)
                 ->where('location', $v['source_location'])
                 ->whereDate('date', $v['source_date'])
@@ -1580,7 +1651,7 @@ class CalendarController extends Controller
                 return response()->json(['message' => 'Source cell has no availability to move.'], 422);
             }
 
-            // Target must be free: no consignments on that side and no existing availability.
+            // Target must not carry consignments on the side we are moving onto.
             $tgtOp = $v['target_location'] === 'SG' ? '=' : '!=';
             $targetHasCons = Consignment::where('truck_number', $v['target_truck'])
                 ->whereDate('load_date', $v['target_date'])
@@ -1593,17 +1664,43 @@ class CalendarController extends Controller
             $targetAvail = Availability::where('truck_id', $truck->id)
                 ->where('location', $v['target_location'])
                 ->whereDate('date', $v['target_date'])
-                ->exists();
-            if ($targetAvail) {
-                return response()->json(['message' => 'Target cell already has an availability.'], 422);
+                ->lockForUpdate()
+                ->first();
+
+            if ($sameLoc) {
+                // Horizontal date shift: the target date must be completely free.
+                if ($targetAvail) {
+                    return response()->json(['message' => 'Target cell already has an availability.'], 422);
+                }
+                $source->date = $v['target_date'];
+                $source->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Availability moved to ' . $v['target_date'] . '.',
+                ]);
             }
 
-            $source->date = $v['target_date'];
+            // Vertical flip (same date, MY<->SG). Swap with the other side if it also
+            // has availability, otherwise just move this record to the other side.
+            if ($targetAvail) {
+                $targetAvail->location = $v['source_location'];
+                $targetAvail->save();
+                $source->location = $v['target_location'];
+                $source->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Swapped MY/SG on ' . $v['target_date'] . '.',
+                ]);
+            }
+
+            $source->location = $v['target_location'];
             $source->save();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Availability moved to ' . $v['target_date'] . '.',
+                'message' => 'Availability moved to ' . $v['target_location'] . '.',
             ]);
         });
     }

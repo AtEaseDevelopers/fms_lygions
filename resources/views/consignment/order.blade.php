@@ -1027,37 +1027,31 @@
             return (value || '').toString().replace(/\s*\((?:Temp|Subcon)\)\s*$/i, '');
         }
 
+        // Identical matching rule to the inline-edit dropdown (populateInlineTruckSelect
+        // → isValid), so the always-on listing dropdown offers EXACTLY the same trucks:
+        // a truck must satisfy BOTH the pick and drop criteria; a criterion that isn't
+        // set (or is "any") doesn't exclude anything, so with none set all trucks show.
         function isValidTruck(truck, pickType, pickSize, dropType, dropSize) {
-            // chassis_type is mandatory
-            if (!truck.chassis_type) return false;
-
             const tType = normalize(truck.chassis_type);
             const tSize = normalize(truck.size); // may be empty
 
-            let matchPick = false;
-            let matchDrop = false;
+            let matchPick = true;
+            let matchDrop = true;
 
-            /* ---------- PICK CHECK ---------- */
-            if (pickType) {
+            if (pickType && pickType !== 'any') {
                 matchPick = tType === pickType;
-
-                // size only checked if truck HAS size AND order HAS size
-                if (matchPick && tSize && pickSize) {
-                    matchPick = tSize === pickSize;
-                }
             }
-
-            /* ---------- DROP CHECK ---------- */
-            if (dropType) {
+            if (matchPick && pickSize && pickSize !== 'any' && tSize) {
+                matchPick = tSize === pickSize;
+            }
+            if (dropType && dropType !== 'any') {
                 matchDrop = tType === dropType;
-
-                if (matchDrop && tSize && dropSize) {
-                    matchDrop = tSize === dropSize;
-                }
+            }
+            if (matchDrop && dropSize && dropSize !== 'any' && tSize) {
+                matchDrop = tSize === dropSize;
             }
 
-            // Return true if EITHER pick OR drop matches
-            return matchPick || matchDrop;
+            return matchPick && matchDrop;
         }
 
         function populateRowSelect(row, trucks, subcons, tempTrucks) {
@@ -1070,37 +1064,32 @@
             const select = row.querySelector('.truck-number-select');
             if (!select) return;
 
-            const hasPickCriteria = !!pickType;
-            const hasDropCriteria = !!dropType;
-            const hasCriteria = hasPickCriteria || hasDropCriteria;
-
-            // Always start with the placeholder option, never short-circuit
+            // Keep the dropdown LIVE at all times (reassign inline, no "Edit All").
             select.innerHTML = '<option value="">-</option>';
-            select.disabled = true;
+            select.disabled = false;
 
-            // Add matching main trucks (only meaningful when criteria are set)
-            if (hasCriteria) {
-                trucks
-                    .filter(t => isValidTruck(t, pickType, pickSize, dropType, dropSize))
-                    .forEach(t => {
-                        const opt = document.createElement('option');
-                        opt.value = t.number;
-                        opt.textContent = t.number;
-                        if (t.number === selectedTruck) opt.selected = true;
-                        select.appendChild(opt);
-                    });
+            // Add matching main trucks + subcons — same filter as the inline-edit
+            // dropdown, and NOT gated on having a truck type (so a row without a type
+            // still lists every available truck, exactly like inline edit).
+            (trucks || [])
+                .filter(t => isValidTruck(t, pickType, pickSize, dropType, dropSize))
+                .forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.number;
+                    opt.textContent = t.number;
+                    if (t.number === selectedTruck) opt.selected = true;
+                    select.appendChild(opt);
+                });
 
-                // Add matching subcon trucks
-                subcons
-                    .filter(s => isValidTruck(s, pickType, pickSize, dropType, dropSize))
-                    .forEach(s => {
-                        const opt = document.createElement('option');
-                        opt.value = s.truck_no;
-                        opt.textContent = s.truck_no + ' (Subcon)';
-                        if (s.truck_no === selectedTruck) opt.selected = true;
-                        select.appendChild(opt);
-                    });
-            }
+            (subcons || [])
+                .filter(s => isValidTruck(s, pickType, pickSize, dropType, dropSize))
+                .forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.truck_no;
+                    opt.textContent = s.truck_no + ' (Subcon)';
+                    if (s.truck_no === selectedTruck) opt.selected = true;
+                    select.appendChild(opt);
+                });
 
             // Add ALL temporary subcon trucks for this date — even when criteria are missing.
             // Once a subcon is assigned, show the real truck no with " (Subcon)"; otherwise " (Temp)".
@@ -1163,6 +1152,40 @@
         }
 
         fetchAndPopulateRows();
+
+        // Inline truck reassignment: each row's truck dropdown is live at all times
+        // (no "Edit All"). Changing it saves immediately with no page reload, so the
+        // active filters and sorting are never reset.
+        // jQuery delegation (not native addEventListener): Select2 fires its change
+        // through jQuery, which a vanilla listener would miss.
+        jQuery(document).on('change', '.truck-number-select', function() {
+            const sel = this;
+            const row = sel.closest('.order-row');
+            if (!row || !row.dataset.id) return;
+            // While "Edit All" is open, let that flow own the save instead.
+            if (typeof editAllMode !== 'undefined' && editAllMode) return;
+
+            const id = row.dataset.id;
+            const truckNumber = sel.value;
+            fetch(`{{ url('consignment-order') }}/${id}/truck-number`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ truck_number: truckNumber }),
+            }).then(async res => {
+                const body = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(body.message || 'Could not update truck.');
+                row.dataset.selectedTruck = body.truck_number || '';
+                Swal.fire({ toast: true, position: 'top-end', icon: 'success',
+                    title: body.message || 'Truck updated', timer: 1400, showConfirmButton: false });
+            }).catch(err => {
+                Swal.fire({ toast: true, position: 'top-end', icon: 'error',
+                    title: err.message, timer: 2500, showConfirmButton: false });
+            });
+        });
 
         // Set sticky column positions
         setTimeout(function() {
@@ -1279,6 +1302,62 @@
             });
         })();
 
+        // Floating horizontal scrollbar: when many rows push the table's own
+        // scrollbar below the fold, mirror it in a bar pinned to the viewport
+        // bottom so planners can always scroll sideways.
+        (function setupFloatingScrollbar() {
+            const container = document.getElementById('tableScrollBottom');
+            if (!container) return;
+            const table = document.getElementById('consignmentTable');
+
+            const bar = document.createElement('div');
+            bar.id = 'floatingHScroll';
+            const inner = document.createElement('div');
+            bar.appendChild(inner);
+            document.body.appendChild(bar);
+
+            let syncing = false;
+            bar.addEventListener('scroll', function() {
+                if (syncing) return;
+                syncing = true;
+                container.scrollLeft = bar.scrollLeft;
+                syncing = false;
+            });
+            container.addEventListener('scroll', function() {
+                if (syncing) return;
+                syncing = true;
+                bar.scrollLeft = container.scrollLeft;
+                syncing = false;
+            });
+
+            function update() {
+                const overflow = container.scrollWidth - container.clientWidth > 1;
+                const rect = container.getBoundingClientRect();
+                // The real scrollbar is hidden when the container bottom sits
+                // below the viewport bottom.
+                const belowFold = rect.bottom > window.innerHeight + 1;
+                if (overflow && belowFold && rect.width > 0) {
+                    bar.style.display = 'block';
+                    bar.style.left = rect.left + 'px';
+                    bar.style.width = rect.width + 'px';
+                    inner.style.width = container.scrollWidth + 'px';
+                    bar.scrollLeft = container.scrollLeft;
+                } else {
+                    bar.style.display = 'none';
+                }
+            }
+
+            window.addEventListener('scroll', update, { passive: true });
+            window.addEventListener('resize', update);
+            if (table) {
+                new MutationObserver(function() {
+                    setTimeout(update, 50);
+                }).observe(table, { childList: true, subtree: true });
+            }
+            window.updateFloatingScrollbar = update;
+            setTimeout(update, 200);
+        })();
+
         const filterForm = $('#filterForm');
         const daterangeInput = $('#filter_daterange');
 
@@ -1346,8 +1425,9 @@
             $('#truckType').val('');
             $('#truckNumber').val('');
 
-            // Redirect to base URL without any filters
-            window.location.href = "{{ route('consignment-order.index') }}";
+            // Redirect to base URL and clear the saved filters/sort for this user
+            // (reset=1), otherwise the page would just re-apply them.
+            window.location.href = "{{ route('consignment-order.index') }}?reset=1";
         });
 
         // Show/hide clear button based on active filters
@@ -1868,6 +1948,41 @@
                 dropdownParent: jQuery('body'),
                 placeholder: '-',
                 allowClear: false
+            });
+
+            // Unit dropdown shortcut: typing "p" then Enter/Tab picks P4,
+            // "f" picks FT. Full search still works (e.g. "pallet", "p4").
+            if ((el.name || '').indexOf('unit') === 0) {
+                bindUnitShortcut($el, el);
+            }
+        }
+
+        // Map a single typed letter to a default unit code.
+        const UNIT_SHORTCUTS = { p: 'p4', f: 'ft' };
+
+        // When a unit Select2 is open, let "p"/"f" + Enter/Tab default to
+        // P4/FT so planners can key units fast without scrolling.
+        function bindUnitShortcut($el, el) {
+            $el.on('select2:open', function() {
+                const search = document.querySelector(
+                    '.select2-container--open .select2-search__field');
+                if (!search || search.dataset.unitShortcutBound) return;
+                search.dataset.unitShortcutBound = '1';
+                // Capture phase + stopImmediatePropagation so this runs BEFORE Select2's
+                // own Enter handler (which would otherwise pick the first filtered result).
+                search.addEventListener('keydown', function(e) {
+                    if (e.key !== 'Enter' && e.key !== 'Tab') return;
+                    const q = (search.value || '').trim().toLowerCase();
+                    const target = UNIT_SHORTCUTS[q];
+                    if (!target) return; // let normal search/select happen
+                    const opt = Array.from(el.options).find(o =>
+                        (o.value || '').trim().toLowerCase() === target);
+                    if (!opt) return;
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    $el.val(opt.value).trigger('change');
+                    $el.select2('close');
+                }, true);
             });
         }
 
@@ -2663,84 +2778,27 @@
             })();
         });
 
-        // Helper: populate truck dropdown for a single row
+        // Helper: (re)populate a display row's truck dropdown — e.g. after an edit is
+        // cancelled. Delegates to populateRowSelect so the option list and the always-on
+        // (enabled) behaviour stay identical to the initial load and the inline edit.
         function populateTruckDropdown(row) {
-            const pickType = normalize(row.dataset.pickType);
-            const pickSize = normalize(row.dataset.pickSize);
-            const dropType = normalize(row.dataset.dropType);
-            const dropSize = normalize(row.dataset.dropSize);
-            const selectedTruck = stripTruckSuffix(row.dataset.selectedTruck);
-            const loadDate = row.dataset.loadDate || '';
-
             const select = row.querySelector('.truck-number-select');
             if (!select) return;
-
-            const hasPickCriteria = !!pickType;
-            const hasDropCriteria = !!dropType;
-
-            if (!hasPickCriteria && !hasDropCriteria) {
-                select.innerHTML = '<option value="">-</option>';
-                return;
-            }
-
-            function fillSelect(trucks, subcons, tempTrucks) {
-                select.innerHTML = '<option value="">-</option>';
-                select.disabled = true;
-
-                trucks
-                    .filter(t => isValidTruck(t, pickType, pickSize, dropType, dropSize))
-                    .forEach(t => {
-                        const opt = document.createElement('option');
-                        opt.value = t.number;
-                        opt.textContent = t.number;
-                        if (t.number === selectedTruck) opt.selected = true;
-                        select.appendChild(opt);
-                    });
-
-                subcons
-                    .filter(s => isValidTruck(s, pickType, pickSize, dropType, dropSize))
-                    .forEach(s => {
-                        const opt = document.createElement('option');
-                        opt.value = s.truck_no;
-                        opt.textContent = s.truck_no + ' (Subcon)';
-                        if (s.truck_no === selectedTruck) opt.selected = true;
-                        select.appendChild(opt);
-                    });
-
-                (tempTrucks || []).forEach(t => {
-                    const opt = document.createElement('option');
-                    opt.value = t.truck_no;
-                    opt.textContent = (t.subcon_id && t.subcon_truck_no)
-                        ? t.subcon_truck_no + ' (Subcon)'
-                        : t.truck_no + ' (Temp)';
-                    if (t.truck_no === selectedTruck) opt.selected = true;
-                    select.appendChild(opt);
-                });
-
-                // Ensure currently assigned truck is always in the list (run last so it
-                // doesn't duplicate a temp-truck label that's already been appended).
-                if (selectedTruck && !select.querySelector(`option[value="${selectedTruck}"]`)) {
-                    const opt = document.createElement('option');
-                    opt.value = selectedTruck;
-                    opt.textContent = selectedTruck;
-                    opt.selected = true;
-                    select.insertBefore(opt, select.options[1] || null);
-                }
-            }
+            const loadDate = row.dataset.loadDate || '';
 
             if (loadDate && truckCacheByDate[loadDate]) {
-                const cached = truckCacheByDate[loadDate];
-                fillSelect(cached.trucks, cached.subcons, cached.temp_trucks || []);
+                const c = truckCacheByDate[loadDate];
+                populateRowSelect(row, c.trucks, c.subcons, c.temp_trucks || []);
             } else if (loadDate) {
                 fetch(`/api/available-trucks?date=${loadDate}`)
                     .then(r => r.json())
                     .then(data => {
                         truckCacheByDate[loadDate] = data;
-                        fillSelect(data.trucks, data.subcons, data.temp_trucks || []);
+                        populateRowSelect(row, data.trucks, data.subcons, data.temp_trucks || []);
                     })
-                    .catch(() => fillSelect(ALL_TRUCKS, ALL_SUBCONS, []));
+                    .catch(() => populateRowSelect(row, ALL_TRUCKS, ALL_SUBCONS, []));
             } else {
-                fillSelect(ALL_TRUCKS, ALL_SUBCONS, []);
+                populateRowSelect(row, ALL_TRUCKS, ALL_SUBCONS, []);
             }
         }
 
@@ -2892,14 +2950,17 @@
         background: #fff !important;
     }
 
+    /* Frozen columns must sit ABOVE the scrollable cells' funnel icons (z-index 5)
+       and resize handles (z-index 6); otherwise those icons bleed over the frozen
+       columns while scrolling sideways. The open filter panel is fixed at z 1060. */
     table.table thead th.sticky-col {
         background: #f8f9fa !important;
-        z-index: 2 !important;
+        z-index: 7 !important;
     }
 
     table.table tbody td.sticky-col {
         background: #f8f9fa !important;
-        z-index: 3 !important;
+        z-index: 8 !important;
     }
 
     /* Position each sticky column */
@@ -2948,6 +3009,40 @@
     #tableScrollBottom {
         overflow-x: auto;
         overflow-y: hidden;
+    }
+
+    /* Floating horizontal scrollbar pinned to the bottom of the viewport.
+       Stays visible when the table's own scrollbar is scrolled out of view. */
+    #floatingHScroll {
+        position: fixed;
+        bottom: 0;
+        z-index: 1030;
+        overflow-x: auto;
+        overflow-y: hidden;
+        height: 14px;
+        display: none;
+        background: rgba(255, 255, 255, 0.95);
+        border-top: 1px solid #dee2e6;
+        box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.08);
+        scrollbar-width: thin;
+    }
+
+    #floatingHScroll>div {
+        height: 1px;
+    }
+
+    #floatingHScroll::-webkit-scrollbar {
+        height: 12px;
+        -webkit-appearance: none;
+    }
+
+    #floatingHScroll::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 6px;
+    }
+
+    #floatingHScroll::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.06);
     }
 
     /* Truck card styles */
@@ -3015,10 +3110,9 @@
         font-size: 0.875rem;
     }
 
-    /* Fixed-width select column */
+    /* Match the inline-edit truck dropdown: a standard form-select-sm that fills
+       its cell (no fixed width), just with the closed value truncated tidily. */
     .truck-number-select {
-        width: 15ch;
-        max-width: 15ch;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -3423,6 +3517,42 @@
             if (btn) btn.classList.toggle("filter-active", !!activeFilters[cfg.i]);
         }
 
+        // --- Persist per-column filters (per user; survives refresh/nav/logout) ---
+        const SAVED_COL_FILTERS = @json($planningColumnFilters ?: (object) []);
+        let savePrefsTimer = null;
+        function saveColumnFilters() {
+            const payload = {};
+            Object.keys(activeFilters).forEach((k) => {
+                payload[k] = Array.from(activeFilters[k]);
+            });
+            clearTimeout(savePrefsTimer);
+            savePrefsTimer = setTimeout(() => {
+                fetch("{{ route('consignment-order.save-prefs') }}", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRF-TOKEN": "{{ csrf_token() }}",
+                        "Accept": "application/json",
+                    },
+                    body: JSON.stringify({ columnFilters: payload }),
+                }).catch(() => {});
+            }, 400);
+        }
+
+        // Re-apply the user's saved column filters on load. Called AFTER the funnel
+        // buttons are created so the active-filter highlight lands on them.
+        function restoreColumnFilters() {
+            if (!SAVED_COL_FILTERS || typeof SAVED_COL_FILTERS !== "object") return;
+            Object.keys(SAVED_COL_FILTERS).forEach((k) => {
+                const idx = Number(k);
+                const vals = SAVED_COL_FILTERS[k];
+                if (!CFG_BY_INDEX[idx] || !Array.isArray(vals) || !vals.length) return;
+                activeFilters[idx] = new Set(vals);
+                markFunnel(CFG_BY_INDEX[idx]);
+            });
+            applyFilters();
+        }
+
         function buildPanel(cfg, anchorBtn) {
             closePanel();
 
@@ -3479,6 +3609,7 @@
                 }
                 applyFilters();
                 markFunnel(cfg);
+                saveColumnFilters();
             }
 
             panel.querySelector(".cfp-search").addEventListener("input", function () {
@@ -3543,6 +3674,9 @@
             th.appendChild(btn);
         });
 
+        // Funnel buttons now exist — re-apply any saved per-column filters.
+        restoreColumnFilters();
+
         // Close the panel on outside click, Escape, table scroll, or window resize.
         document.addEventListener("mousedown", function (e) {
             if (openPanel && !openPanel.contains(e.target) && !e.target.closest(".col-filter-btn")) {
@@ -3562,6 +3696,7 @@
                 Object.keys(activeFilters).forEach((k) => delete activeFilters[k]);
                 FILTER_COLS.forEach(markFunnel);
                 applyFilters();
+                saveColumnFilters();
                 closePanel();
             });
         }
